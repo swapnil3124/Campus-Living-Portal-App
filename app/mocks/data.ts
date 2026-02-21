@@ -1,0 +1,241 @@
+import { Hostel, Notice, Student, Complaint, LeaveApplication, RoomAsset, Roommate, MessMenu } from '@/constants/types';
+
+export const hostels: Hostel[] = [
+    {
+        id: 'saraswati',
+        name: 'Saraswati',
+        type: 'girls',
+        capacity: 144,
+        facilities: ['Sanitary Napkin Vending Machine', 'Solar Water Heater', 'CCTV Camera', 'Aqua Guard Water Filter', 'Mess Facility'],
+        rector: 'Smt. Priya Narayandas Malu',
+        rectorTitle: 'Lecturer in Electronics Engineering',
+    },
+    {
+        id: 'shwetambara',
+        name: 'Shwetambara',
+        type: 'girls',
+        capacity: 144,
+        facilities: ['Sanitary Napkin Vending Machine', 'Solar Water Heater', 'CCTV Camera', 'Aqua Guard Water Filter', 'Mess Facility'],
+        rector: 'Smt. Priya Narayandas Malu',
+        rectorTitle: 'Lecturer in Electronics Engineering',
+    },
+    {
+        id: 'lenyadri',
+        name: 'Lenyadri',
+        type: 'boys',
+        capacity: 112,
+        facilities: ['Solar Water Heater', 'CCTV Camera', 'Aqua Guard Water Filter', 'Mess Facility'],
+        rector: 'Dr. M. R. Umbarkar',
+        rectorTitle: 'Lecturer in Electronics Engineering',
+        rectorPhone: '7972565738',
+    },
+    {
+        id: 'bhimashankar',
+        name: 'Bhimashankar',
+        type: 'boys',
+        capacity: 112,
+        facilities: ['Solar Water Heater', 'CCTV Camera', 'Aqua Guard Water Filter', 'Mess Facility'],
+        rector: 'Dr. M. R. Umbarkar',
+        rectorTitle: 'Lecturer in Electronics Engineering',
+        rectorPhone: '7972565738',
+    },
+    {
+        id: 'shivneri',
+        name: 'Shivneri',
+        type: 'boys',
+        capacity: 112,
+        facilities: ['Solar Water Heater', 'CCTV Camera', 'Aqua Guard Water Filter', 'Mess Facility'],
+        rector: 'Dr. M. R. Umbarkar',
+        rectorTitle: 'Lecturer in Electronics Engineering',
+        rectorPhone: '7972565738',
+    },
+];
+
+export const notices: Notice[] = [
+    {
+        id: '1',
+        title: 'Hostel Admission Open 2025-26',
+        description: 'Applications are now open for hostel admission for the academic year 2025-26. Students are requested to apply before the deadline.',
+        date: '2025-07-15',
+        issuedBy: 'Hostel Office',
+        priority: 'urgent',
+        isNew: true,
+        category: 'Admission',
+    },
+    {
+        id: '2',
+        title: 'Last Date for Hostel Admission – 30th June 2025',
+        description: 'All students who wish to avail hostel facility must complete their admission process before 30th June 2025.',
+        date: '2025-06-15',
+        issuedBy: 'Hostel Office',
+        priority: 'important',
+        isNew: true,
+        category: 'Admission',
+    },
+    {
+        id: '3',
+        title: 'Selected Students List – Boys Hostel 2025-26',
+        description: 'The list of selected students for Boys Hostel has been published. Please check the notice board for details.',
+        date: '2025-07-05',
+        issuedBy: 'Warden Office',
+        priority: 'important',
+        isNew: true,
+        category: 'Selection',
+    },
+    {
+        id: '4',
+        title: 'Room Allotment Schedule – All Hostels',
+        description: 'Room allotment will be conducted on 10th July 2025. Students must report with required documents.',
+        date: '2025-07-01',
+        issuedBy: 'Hostel Office',
+        priority: 'normal',
+        isNew: false,
+        category: 'Allotment',
+    },
+    {
+        id: '5',
+        title: 'Mess Menu Updated – July 2025',
+        description: 'The mess menu for July 2025 has been updated. Please check the mess section for the latest menu.',
+        date: '2025-07-01',
+        issuedBy: 'Mess Committee',
+        priority: 'normal',
+        isNew: false,
+        category: 'Mess',
+    },
+    {
+        id: '6',
+        title: 'Hostel Rules & Regulations – Reminder',
+        description: 'All hostel residents are reminded to follow the hostel rules and regulations strictly.',
+        date: '2025-06-20',
+        issuedBy: 'Warden Office',
+        priority: 'important',
+        isNew: false,
+        category: 'General',
+    },
+    {
+        id: '7',
+        title: 'Water Supply Maintenance – 5th July',
+        description: 'Water supply will be interrupted on 5th July from 10 AM to 2 PM due to maintenance work.',
+        date: '2025-07-03',
+        issuedBy: 'Hostel Office',
+        priority: 'normal',
+        isNew: false,
+        category: 'General',
+    },
+];
+
+export const mockStudent: Student = {
+    id: 'STU001',
+    name: 'Rahul Sharma',
+    enrollmentNo: '2023EP001',
+    hostelName: 'Shivneri',
+    hostelType: 'boys',
+    roomNo: '204',
+    floor: 2,
+    bedNumber: 'A',
+    department: 'Electronics Engineering',
+    year: 'Second Year',
+    status: 'active',
+    phone: '9876543210',
+    email: 'rahul.sharma@gpa.edu',
+    dob: '2004-05-15',
+    category: 'OBC',
+    rollNo: '45',
+    admissionType: 'Regular',
+    dateOfJoining: '2024-07-15',
+    feeStatus: 'paid',
+    parentName: 'Mr. Suresh Sharma',
+    parentRelation: 'Father',
+    parentContact: '9876543211',
+    parentAddress: 'Pune, Maharashtra',
+    photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face',
+    academicYear: '2024-25',
+};
+
+export const mockComplaints: Complaint[] = [
+    {
+        id: 'C001',
+        type: 'Electricity',
+        description: 'Fan not working in room 204. Please repair it as soon as possible.',
+        priority: 'high',
+        status: 'in-progress',
+        createdAt: '2025-07-10',
+        updatedAt: '2025-07-11',
+        wardenRemark: 'Electrician assigned. Will be fixed by tomorrow.',
+    },
+    {
+        id: 'C002',
+        type: 'Water',
+        description: 'Low water pressure in the bathroom on 2nd floor.',
+        priority: 'medium',
+        status: 'pending',
+        createdAt: '2025-07-12',
+        updatedAt: '2025-07-12',
+    },
+    {
+        id: 'C003',
+        type: 'Room',
+        description: 'Window lock is broken and needs replacement.',
+        priority: 'low',
+        status: 'resolved',
+        createdAt: '2025-06-28',
+        updatedAt: '2025-07-02',
+        wardenRemark: 'Window lock replaced on 2nd July.',
+    },
+];
+
+export const mockLeaves: LeaveApplication[] = [
+    {
+        id: 'L001',
+        leaveType: 'Home Visit',
+        fromDate: '2025-07-20',
+        toDate: '2025-07-22',
+        reason: 'Family function at home',
+        destination: 'Pune',
+        parentContact: '9876543211',
+        status: 'approved',
+        createdAt: '2025-07-15',
+    },
+    {
+        id: 'L002',
+        leaveType: 'Medical',
+        fromDate: '2025-07-25',
+        toDate: '2025-07-26',
+        reason: 'Doctor appointment',
+        destination: 'Pune City Hospital',
+        parentContact: '9876543211',
+        status: 'pending',
+        createdAt: '2025-07-18',
+    },
+];
+
+export const roomAssets: RoomAsset[] = [
+    { name: 'Cot', status: 'working' },
+    { name: 'Mattress', status: 'working' },
+    { name: 'Study Table', status: 'working' },
+    { name: 'Chair', status: 'working' },
+    { name: 'Locker', status: 'working' },
+    { name: 'Tube Light', status: 'damaged' },
+    { name: 'Fan', status: 'working' },
+];
+
+export const roommates: Roommate[] = [
+    { name: 'Amit Patil', branch: 'Computer Engineering', year: 'Second Year' },
+    { name: 'Vishal Jadhav', branch: 'Mechanical Engineering', year: 'Second Year' },
+];
+
+export const messMenu: MessMenu = {
+    id: 'M001',
+    hostelName: 'Shivneri',
+    imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&h=400&fit=crop',
+    startDate: '2025-07-01',
+    endDate: '2025-07-31',
+    fees: '₹3,500/month',
+};
+
+export const complaintTypes = ['Room', 'Mess', 'Water', 'Electricity', 'Security', 'Other'];
+export const leaveTypes = ['Home Visit', 'Medical', 'Personal', 'Emergency', 'Other'];
+export const emergencyTypes = ['Medical Emergency', 'Fire', 'Security Threat', 'Natural Disaster', 'Other'];
+
+export const boysHostelNames = ['Shivneri', 'Lenyadri', 'Bhimashankar'];
+export const girlsHostelNames = ['Saraswati', 'Shwetambara'];
