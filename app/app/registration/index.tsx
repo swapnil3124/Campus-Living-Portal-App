@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -8,521 +8,504 @@ import {
     TextInput,
     Alert,
     ActivityIndicator,
-    Platform,
+    Modal,
+    FlatList,
+    Animated,
+    Dimensions,
     Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    User,
-    Mail,
-    Phone,
-    School,
-    MapPin,
-    Calendar,
-    Users,
-    Briefcase,
-    GraduationCap,
-    Map,
-    Stethoscope,
-    FileUp,
-    CheckCircle2,
     ChevronLeft,
-    Image as ImageIcon,
+    ChevronDown,
+    X,
+    CheckCircle2,
+    Calendar,
+    Briefcase,
+    FileUp,
+    CheckCircle,
+    Send,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
+import { useAdmissionStore } from '@/store/admission-store';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function RegistrationScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const { addAdmission, regConfig, fetchRegConfig } = useAdmissionStore();
+
     const [isLoading, setIsLoading] = useState(false);
-    const [currentStep, setCurrentStep] = useState(1);
+    const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+    const [currentStep, setCurrentStep] = useState(0); // 0-indexed page
+    const [showDatePicker, setShowDatePicker] = useState<string | null>(null);
+    const [activeDropdown, setActiveDropdown] = useState<{ fieldId: string, options: string[] } | null>(null);
+    const [formData, setFormData] = useState<Record<string, any>>({});
 
-    const [form, setForm] = useState({
-        // Personal Info
-        fullName: '',
-        enrollment: '',
-        email: '',
-        phone: '',
-        dob: '',
-        gender: '',
-        category: '',
-        // Academic Info
-        instituteName: 'Government Polytechnic Awasari',
-        department: '',
-        yearOfStudy: '',
-        prevMarks: '',
-        sscPercentage: '',
-        // Hostel Details
-        hostelType: '',
-        distance: '',
-        permanentAddress: '',
-        // Parents info
-        parentName: '',
-        parentPhone: '',
-        // Health
-        hasMedicalCondition: false,
-        medicalDescription: '',
-        // Files (simulated)
-        photo: null,
-        admissionLetter: null,
-        feeReceipt: null,
-        marksheet: null,
-        undertaking: null,
-    });
+    // Progressive animation
+    const progressAnim = useRef(new Animated.Value(0)).current;
 
-    const handleSubmit = () => {
-        setIsLoading(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    useEffect(() => {
+        fetchRegConfig().then(() => {
+            setIsConfigLoaded(true);
+        });
+    }, []);
 
-        setTimeout(() => {
-            setIsLoading(false);
-            Alert.alert(
-                'Application Received',
-                'Your admission request for 2025-26 has been submitted. Our team will verify your documents.',
-                [{ text: 'Return Home', onPress: () => router.replace('/(tabs)/(home)') }]
-            );
-        }, 2000);
+    useEffect(() => {
+        if (regConfig.pages && regConfig.pages.length > 0) {
+            const initialData: Record<string, any> = {};
+            regConfig.pages.forEach(page => {
+                page.fields.forEach(field => {
+                    // Preserve existing data if possible, otherwise initialize
+                    initialData[field.id] = formData[field.id] || (field.type === 'dropdown' ? '' : '');
+                });
+            });
+            setFormData(initialData);
+        }
+    }, [regConfig.pages]);
+
+    useEffect(() => {
+        Animated.spring(progressAnim, {
+            toValue: currentStep,
+            useNativeDriver: false,
+            friction: 7,
+            tension: 40,
+        }).start();
+    }, [currentStep]);
+
+    if (!isConfigLoaded) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={styles.loadingText}>Loading form...</Text>
+            </View>
+        );
+    }
+
+    const pages = regConfig.pages || [];
+    const currentPage = pages[currentStep];
+    const isClosed = !regConfig.isOpen;
+    const now = new Date();
+    const isPast = regConfig.endDate && now > new Date(regConfig.endDate);
+    const isBefore = regConfig.startDate && now < new Date(regConfig.startDate);
+
+    if (isClosed || isPast || isBefore) {
+        return (
+            <View style={styles.loadingContainer}>
+                <X size={48} color={Colors.error} />
+                <Text style={[styles.loadingText, { color: Colors.text, fontSize: 18, marginTop: 16 }]}>
+                    {isClosed ? 'Registration is Closed' :
+                        isPast ? 'Registration Deadline has Passed' :
+                            'Registration has not started yet'}
+                </Text>
+                <Text style={{ color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 40, marginTop: 8 }}>
+                    {isPast ? `The deadline was ${new Date(regConfig.endDate).toLocaleDateString()}` :
+                        isBefore ? `Registration will open on ${new Date(regConfig.startDate).toLocaleDateString()}` :
+                            'Please check back later or contact the administrator.'}
+                </Text>
+                <TouchableOpacity style={[styles.backBtnFooter, { marginTop: 30, width: 200 }]} onPress={() => router.back()}>
+                    <Text style={styles.backBtnText}>Go Back</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    if (pages.length === 0) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={styles.loadingText}>Syncing form configuration...</Text>
+            </View>
+        );
+    }
+
+    const validateStep = () => {
+        if (!currentPage) return false;
+        const missing = currentPage.fields.find(f => f.required && !formData[f.id]);
+        if (missing) {
+            Alert.alert('Required Field', `Please fill in "${missing.label}" to proceed.`);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            return false;
+        }
+        return true;
     };
 
-    const renderInput = (label: string, value: string, onChange: (v: string) => void, icon: any, placeholder: string, keyboard: any = 'default', extra: any = {}) => (
-        <View style={styles.inputGroup}>
-            <Text style={styles.label}>{label}</Text>
-            <View style={styles.inputWrap}>
-                {React.createElement(icon, { size: 18, color: Colors.textLight })}
-                <TextInput
-                    style={styles.input}
-                    value={value}
-                    onChangeText={onChange}
-                    placeholder={placeholder}
-                    keyboardType={keyboard}
-                    {...extra}
-                />
-            </View>
-        </View>
-    );
+    const handleNext = () => {
+        if (validateStep()) {
+            if (currentStep < pages.length - 1) {
+                setCurrentStep(currentStep + 1);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+        }
+    };
 
-    const renderFileUpload = (label: string, icon: any, isUploaded: boolean) => (
-        <TouchableOpacity
-            style={[styles.uploadBox, isUploaded && styles.uploadBoxActive]}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-        >
-            <View style={styles.uploadInfo}>
-                {React.createElement(icon, { size: 20, color: isUploaded ? Colors.primary : Colors.textLight })}
-                <Text style={[styles.uploadLabel, isUploaded && styles.uploadLabelActive]}>{label}</Text>
+    const handleBack = () => {
+        if (currentStep > 0) {
+            setCurrentStep(currentStep - 1);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } else {
+            router.back();
+        }
+    };
+
+    const handleFilePick = async (fieldId: string) => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['application/pdf', 'image/*'],
+                copyToCacheDirectory: true,
+            });
+
+            if (!result.canceled) {
+                const asset = result.assets[0];
+                console.log('Picked file URI:', asset.uri);
+
+                // Convert to base64 for persistent storage
+                const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+                    encoding: 'base64',
+                });
+
+                setFormData(prev => ({
+                    ...prev,
+                    [fieldId]: {
+                        name: asset.name,
+                        type: asset.mimeType,
+                        base64: `data:${asset.mimeType};base64,${base64}`
+                    }
+                }));
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch (err: any) {
+            console.error('File pick error details:', err);
+            Alert.alert('Processing Error', `Failed to process document: ${err.message || 'Unknown error'}`);
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!validateStep()) return;
+
+        setIsLoading(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        try {
+            // Map fixed fields explicitly, everything else goes to additionalData
+            const {
+                fullName, enrollment, email, phone,
+                department, year, prevMarks, category, gender,
+                ...rest
+            } = formData;
+
+            const success = await addAdmission({
+                fullName: fullName || '',
+                enrollment: enrollment || '',
+                email: email || '',
+                phone: phone || '',
+                department: department || '',
+                year: year || '',
+                prevMarks: prevMarks || '',
+                category: category || '',
+                gender: gender || '',
+                additionalData: rest,
+                status: 'pending'
+            } as any);
+
+            setIsLoading(false);
+            if (success) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert(
+                    'Success!',
+                    'Your admission application has been submitted.',
+                    [{ text: 'Done', onPress: () => router.replace('/(tabs)/(home)') }]
+                );
+            } else {
+                Alert.alert('Submission Failed', 'Please try again later.');
+            }
+        } catch (error) {
+            setIsLoading(false);
+            Alert.alert('Error', 'An unexpected error occurred.');
+        }
+    };
+
+    const renderField = (field: any) => {
+        const value = formData[field.id] || '';
+        const updateValue = (v: any) => setFormData(prev => ({ ...prev, [field.id]: v }));
+
+        const label = (
+            <Text style={styles.label}>
+                {field.label} {field.required && <Text style={styles.required}>*</Text>}
+            </Text>
+        );
+
+        if (field.type === 'dropdown') {
+            return (
+                <View key={field.id} style={styles.inputGroup}>
+                    {label}
+                    <TouchableOpacity
+                        style={[styles.inputContainer, value ? styles.inputActive : null]}
+                        onPress={() => setActiveDropdown({ fieldId: field.id, options: field.options || [] })}
+                    >
+                        <Text style={[styles.inputText, !value && { color: Colors.textLight }]}>
+                            {value || `Select ${field.label}`}
+                        </Text>
+                        <ChevronDown size={18} color={Colors.textLight} />
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        if (field.type === 'date') {
+            return (
+                <View key={field.id} style={styles.inputGroup}>
+                    {label}
+                    <TouchableOpacity
+                        style={[styles.inputContainer, value ? styles.inputActive : null]}
+                        onPress={() => setShowDatePicker(field.id)}
+                    >
+                        <Text style={[styles.inputText, !value && { color: Colors.textLight }]}>
+                            {value || `Choose date`}
+                        </Text>
+                        <Calendar size={18} color={value ? Colors.primary : Colors.textLight} />
+                    </TouchableOpacity>
+                    {showDatePicker === field.id && (
+                        <DateTimePicker
+                            value={value ? new Date(value) : new Date()}
+                            mode="date"
+                            onChange={(e, d) => {
+                                setShowDatePicker(null);
+                                if (d) updateValue(d.toLocaleDateString());
+                            }}
+                        />
+                    )}
+                </View>
+            );
+        }
+
+        if (field.type === 'file') {
+            return (
+                <View key={field.id} style={styles.inputGroup}>
+                    {label}
+                    <TouchableOpacity
+                        style={[styles.inputContainer, value ? styles.inputActive : null]}
+                        onPress={() => handleFilePick(field.id)}
+                    >
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.inputText, !value && { color: Colors.textLight }]}>
+                                {value ? (typeof value === 'object' ? value.name : 'Document Selected') : `Upload ${field.label}`}
+                            </Text>
+                            {value ? <Text style={{ fontSize: 10, color: Colors.success, marginTop: 2 }}>File ready for submission</Text> : null}
+                        </View>
+                        <FileUp size={18} color={value ? Colors.primary : Colors.textLight} />
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+
+        return (
+            <View key={field.id} style={styles.inputGroup}>
+                {label}
+                <View style={[styles.inputContainer, value ? styles.inputActive : null]}>
+                    <TextInput
+                        style={styles.inputText}
+                        value={value}
+                        onChangeText={updateValue}
+                        placeholder={field.label}
+                        placeholderTextColor={Colors.textLight}
+                        keyboardType={field.type === 'number' ? 'number-pad' :
+                            field.type === 'email' ? 'email-address' :
+                                field.type === 'phone' ? 'phone-pad' : 'default'}
+                    />
+                </View>
             </View>
-            <View style={[styles.uploadBtn, isUploaded && styles.uploadBtnActive]}>
-                <Text style={styles.uploadBtnText}>{isUploaded ? 'Change' : 'Upload'}</Text>
+        );
+    };
+
+    const renderProgressBar = () => {
+        if (pages.length <= 1) return null;
+        return (
+            <View style={styles.progressContainer}>
+                {pages.map((_, idx) => {
+                    const isActive = currentStep >= idx;
+                    const isPassed = currentStep > idx;
+                    return (
+                        <React.Fragment key={idx}>
+                            <View style={[
+                                styles.progressDot,
+                                isActive && styles.progressDotActive,
+                                isPassed && styles.progressDotPassed
+                            ]}>
+                                {isPassed ? (
+                                    <CheckCircle size={12} color="#FFF" />
+                                ) : (
+                                    <Text style={[styles.progressText, isActive && { color: '#FFF' }]}>{idx + 1}</Text>
+                                )}
+                            </View>
+                            {idx < pages.length - 1 && (
+                                <View style={[
+                                    styles.progressLine,
+                                    isActive && styles.progressLineActive
+                                ]} />
+                            )}
+                        </React.Fragment>
+                    );
+                })}
             </View>
-        </TouchableOpacity>
-    );
+        );
+    };
 
     return (
         <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <ChevronLeft size={24} color={Colors.text} />
+            {/* Header */}
+            <LinearGradient colors={[Colors.primary, Colors.primaryDark]} style={[styles.header, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity style={styles.headerBackBtn} onPress={handleBack}>
+                    <ChevronLeft size={24} color="#FFF" />
                 </TouchableOpacity>
-                <View>
-                    <Text style={styles.headerTitle}>Admission Form</Text>
-                    <Text style={styles.headerSub}>Hostel Academic Year 2025-26</Text>
+                <View style={styles.headerTitleWrap}>
+                    <Text style={styles.headerTitle}>Hostel Admission</Text>
+                    <Text style={styles.headerSubtitle}>2025 - 2026 Academic Year</Text>
                 </View>
-            </View>
+            </LinearGradient>
 
             <ScrollView
-                contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
                 showsVerticalScrollIndicator={false}
             >
-                {/* ── Progress Indicators ── */}
-                <View style={styles.progressRow}>
-                    {[1, 2, 3, 4].map((s) => (
-                        <View key={s} style={styles.progressStepWrap}>
-                            <View style={[styles.progressDot, currentStep >= s && styles.progressDotActive]} />
-                            {s < 4 && <View style={[styles.progressLine, currentStep > s && styles.progressLineActive]} />}
-                        </View>
-                    ))}
-                </View>
+                {renderProgressBar()}
 
-                <View style={styles.formContainer}>
-                    {currentStep === 1 && (
-                        <View>
-                            <Text style={styles.sectionTitle}>1. Personal Identity</Text>
-                            {renderInput('Full Name (as per records)', form.fullName, (v) => setForm({ ...form, fullName: v }), User, 'Enter full name')}
-                            {renderInput('Enrollment Number', form.enrollment, (v) => setForm({ ...form, enrollment: v }), School, 'ENXXXXXXXX')}
+                <View style={styles.card}>
+                    <View style={styles.pageInfo}>
+                        <Text style={styles.pageTitle}>{currentPage.title}</Text>
+                        {currentPage.description ? <Text style={styles.pageDesc}>{currentPage.description}</Text> : null}
+                    </View>
 
-                            <View style={styles.row}>
-                                <View style={{ flex: 1, marginRight: 10 }}>
-                                    {renderInput('Date of Birth', form.dob, (v) => setForm({ ...form, dob: v }), Calendar, 'DD/MM/YYYY')}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    {renderInput('Gender', form.gender, (v) => setForm({ ...form, gender: v }), Users, 'Male/Female')}
-                                </View>
-                            </View>
-
-                            <View style={styles.row}>
-                                <View style={{ flex: 1, marginRight: 10 }}>
-                                    {renderInput('Category', form.category, (v) => setForm({ ...form, category: v }), Briefcase, 'Open/OBC/SC/ST')}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    {renderInput('Hostel Type', form.hostelType, (v) => setForm({ ...form, hostelType: v }), MapPin, 'Boys/Girls')}
-                                </View>
-                            </View>
-
-                            {renderInput('Email ID', form.email, (v) => setForm({ ...form, email: v }), Mail, 'your@email.com', 'email-address')}
-                            {renderInput('Mobile Number', form.phone, (v) => setForm({ ...form, phone: v }), Phone, '10-digit number', 'phone-pad')}
-                        </View>
-                    )}
-
-                    {currentStep === 2 && (
-                        <View>
-                            <Text style={styles.sectionTitle}>2. Academic & Residential</Text>
-
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.label}>Institute Name</Text>
-                                <View style={[styles.inputWrap, styles.inputDisabled]}>
-                                    <School size={18} color={Colors.textLight} />
-                                    <Text style={styles.disabledText}>{form.instituteName}</Text>
-                                </View>
-                            </View>
-
-                            {renderInput('Branch / Department', form.department, (v) => setForm({ ...form, department: v }), Briefcase, 'e.g. Mechanical Eng.')}
-
-                            <View style={styles.row}>
-                                <View style={{ flex: 1, marginRight: 10 }}>
-                                    {renderInput('Year of Study', form.yearOfStudy, (v) => setForm({ ...form, yearOfStudy: v }), GraduationCap, '1st/2nd/3rd')}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    {renderInput('Distance (KM)', form.distance, (v) => setForm({ ...form, distance: v }), Map, 'e.g. 45')}
-                                </View>
-                            </View>
-
-                            <View style={styles.row}>
-                                <View style={{ flex: 1, marginRight: 10 }}>
-                                    {renderInput('Prev Year Marks %', form.prevMarks, (v) => setForm({ ...form, prevMarks: v }), GraduationCap, 'e.g. 85.50')}
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    {renderInput('SSC Percentage', form.sscPercentage, (v) => setForm({ ...form, sscPercentage: v }), GraduationCap, 'e.g. 92.00')}
-                                </View>
-                            </View>
-
-                            {renderInput('Permanent Address', form.permanentAddress, (v) => setForm({ ...form, permanentAddress: v }), MapPin, 'Full address with PIN', 'default', { multiline: true, numberOfLines: 3 })}
-                        </View>
-                    )}
-
-                    {currentStep === 3 && (
-                        <View>
-                            <Text style={styles.sectionTitle}>3. Parent & Health Info</Text>
-                            {renderInput('Parent / Guardian Name', form.parentName, (v) => setForm({ ...form, parentName: v }), User, 'Father/Mother Name')}
-                            {renderInput('Parent Mobile Number', form.parentPhone, (v) => setForm({ ...form, parentPhone: v }), Phone, 'Emergency contact', 'phone-pad')}
-
-                            <View style={styles.medicalToggle}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.medicalLabel}>Any Medical Condition?</Text>
-                                    <Text style={styles.medicalSub}>Allergies, chronic conditions, etc.</Text>
-                                </View>
-                                <Switch
-                                    value={form.hasMedicalCondition}
-                                    onValueChange={(val) => setForm({ ...form, hasMedicalCondition: val })}
-                                    trackColor={{ false: '#D1D5DB', true: Colors.primary }}
-                                />
-                            </View>
-
-                            {form.hasMedicalCondition && (
-                                <View style={{ marginTop: 10 }}>
-                                    {renderInput('Condition Description', form.medicalDescription, (v) => setForm({ ...form, medicalDescription: v }), Stethoscope, 'Provide brief details')}
-                                </View>
-                            )}
-                        </View>
-                    )}
-
-                    {currentStep === 4 && (
-                        <View>
-                            <Text style={styles.sectionTitle}>4. Document Uploads</Text>
-                            <Text style={styles.uploadSub}>Clearly legible images or PDF copies</Text>
-
-                            {renderFileUpload('Passport Size Photo', ImageIcon, false)}
-                            {renderFileUpload('Admission Letter', FileUp, false)}
-                            {renderFileUpload('Fee Receipt', FileUp, false)}
-                            {renderFileUpload('Previous Marksheet', FileUp, false)}
-                            {renderFileUpload('Undertaking Form', CheckCircle2, false)}
-
-                            <View style={styles.infoNote}>
-                                <Stethoscope size={16} color="#6B7280" />
-                                <Text style={styles.noteText}>By submitting, you agree to follow all hostel rules and regulations as per the undertaking form.</Text>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* ── Navigation Buttons ── */}
-                    <View style={styles.footer}>
-                        {currentStep > 1 && (
-                            <TouchableOpacity style={styles.prevBtn} onPress={() => setCurrentStep(currentStep - 1)}>
-                                <Text style={styles.prevBtnText}>Previous</Text>
-                            </TouchableOpacity>
-                        )}
-
-                        <TouchableOpacity
-                            style={[styles.nextBtn, currentStep === 4 && styles.submitBtn]}
-                            onPress={() => {
-                                if (currentStep < 4) setCurrentStep(currentStep + 1);
-                                else handleSubmit();
-                            }}
-                            disabled={isLoading}
-                        >
-                            <LinearGradient
-                                colors={currentStep === 4 ? ['#00695C', '#004D40'] : [Colors.primary, Colors.primaryDark]}
-                                style={styles.btnGradient}
-                            >
-                                {isLoading ? (
-                                    <ActivityIndicator color={Colors.white} />
-                                ) : (
-                                    <Text style={styles.btnText}>
-                                        {currentStep === 4 ? 'Submit Application' : 'Continue'}
-                                    </Text>
-                                )}
-                            </LinearGradient>
-                        </TouchableOpacity>
+                    <View style={styles.formContent}>
+                        {currentPage.fields.map(field => renderField(field))}
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Footer Navigation */}
+            <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+                {currentStep > 0 && (
+                    <TouchableOpacity style={styles.backBtnFooter} onPress={handleBack}>
+                        <Text style={styles.backBtnText}>Back</Text>
+                    </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                    style={[styles.nextBtn, currentStep === pages.length - 1 && styles.submitBtn]}
+                    onPress={currentStep === pages.length - 1 ? handleSubmit : handleNext}
+                    disabled={isLoading}
+                >
+                    <LinearGradient
+                        colors={currentStep === pages.length - 1 ? ['#059669', '#047857'] : [Colors.primary, Colors.primaryDark]}
+                        style={styles.btnGradient}
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <>
+                                <Text style={styles.btnText}>
+                                    {currentStep === pages.length - 1 ? 'Submit Application' : 'Continue'}
+                                </Text>
+                                {currentStep === pages.length - 1 ? <Send size={18} color="#FFF" /> : null}
+                            </>
+                        )}
+                    </LinearGradient>
+                </TouchableOpacity>
+            </View>
+
+            {/* Dropdown Modal */}
+            <Modal visible={!!activeDropdown} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => setActiveDropdown(null)} />
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Option</Text>
+                            <TouchableOpacity onPress={() => setActiveDropdown(null)}>
+                                <X size={20} color={Colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={activeDropdown?.options}
+                            keyExtractor={item => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.optionItem}
+                                    onPress={() => {
+                                        setFormData(prev => ({ ...prev, [activeDropdown!.fieldId]: item }));
+                                        setActiveDropdown(null);
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.optionText,
+                                        formData[activeDropdown?.fieldId || ''] === item && styles.optionTextActive
+                                    ]}>{item}</Text>
+                                    {formData[activeDropdown?.fieldId || ''] === item && (
+                                        <CheckCircle2 size={18} color={Colors.primary} />
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#FAFAFA',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingBottom: 20,
-        backgroundColor: Colors.white,
-        borderBottomWidth: 1,
-        borderBottomColor: Colors.border,
-    },
-    backBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#F3F4F6',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 15,
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '800' as const,
-        color: Colors.text,
-    },
-    headerSub: {
-        fontSize: 12,
-        color: Colors.textSecondary,
-        marginTop: 2,
-    },
-    progressRow: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        paddingVertical: 24,
-        paddingHorizontal: 50,
-    },
-    progressStepWrap: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    progressDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#E5E7EB',
-    },
-    progressDotActive: {
-        backgroundColor: Colors.primary,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-    },
-    progressLine: {
-        flex: 1,
-        height: 2,
-        backgroundColor: '#E5E7EB',
-        marginHorizontal: 4,
-    },
-    progressLineActive: {
-        backgroundColor: Colors.primary,
-    },
-    formContainer: {
-        paddingHorizontal: 20,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700' as const,
-        color: Colors.text,
-        marginBottom: 20,
-    },
-    inputGroup: {
-        marginBottom: 16,
-    },
-    label: {
-        fontSize: 13,
-        fontWeight: '600' as const,
-        color: Colors.textSecondary,
-        marginBottom: 6,
-    },
-    inputWrap: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: Colors.white,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        gap: 12,
-    },
-    input: {
-        flex: 1,
-        paddingVertical: 12,
-        fontSize: 15,
-        color: Colors.text,
-    },
-    inputDisabled: {
-        backgroundColor: '#F9FAFB',
-        borderColor: '#F3F4F6',
-    },
-    disabledText: {
-        flex: 1,
-        paddingVertical: 12,
-        fontSize: 15,
-        color: Colors.textLight,
-        fontWeight: '500' as const,
-    },
-    row: {
-        flexDirection: 'row',
-    },
-    medicalToggle: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: Colors.white,
-        padding: 16,
-        borderRadius: 14,
-        marginTop: 8,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    medicalLabel: {
-        fontSize: 14,
-        fontWeight: '600' as const,
-        color: Colors.text,
-    },
-    medicalSub: {
-        fontSize: 12,
-        color: Colors.textSecondary,
-        marginTop: 2,
-    },
-    uploadSub: {
-        fontSize: 12,
-        color: Colors.textSecondary,
-        marginBottom: 16,
-    },
-    uploadBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: Colors.white,
-        padding: 14,
-        borderRadius: 12,
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderStyle: 'dashed' as const,
-    },
-    uploadBoxActive: {
-        borderColor: Colors.primary,
-        backgroundColor: Colors.primaryGhost,
-        borderStyle: 'solid' as const,
-    },
-    uploadInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    uploadLabel: {
-        fontSize: 14,
-        fontWeight: '500' as const,
-        color: Colors.textSecondary,
-    },
-    uploadLabelActive: {
-        color: Colors.primary,
-        fontWeight: '600' as const,
-    },
-    uploadBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 8,
-    },
-    uploadBtnActive: {
-        backgroundColor: Colors.primary,
-    },
-    uploadBtnText: {
-        fontSize: 12,
-        fontWeight: '600' as const,
-        color: Colors.textSecondary,
-    },
-    infoNote: {
-        flexDirection: 'row',
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 10,
-        marginTop: 20,
-        gap: 10,
-    },
-    noteText: {
-        flex: 1,
-        fontSize: 12,
-        color: '#6B7280',
-        lineHeight: 18,
-    },
-    footer: {
-        flexDirection: 'row',
-        marginTop: 30,
-        gap: 12,
-    },
-    prevBtn: {
-        flex: 1,
-        backgroundColor: Colors.white,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    prevBtnText: {
-        fontSize: 15,
-        fontWeight: '600' as const,
-        color: Colors.textSecondary,
-    },
-    nextBtn: {
-        flex: 2,
-        borderRadius: 14,
-        overflow: 'hidden',
-    },
-    submitBtn: {
-        flex: 2,
-    },
-    btnGradient: {
-        paddingVertical: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    btnText: {
-        color: Colors.white,
-        fontSize: 15,
-        fontWeight: '700' as const,
-    },
+    container: { flex: 1, backgroundColor: '#F0F2F5' },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
+    loadingText: { marginTop: 12, color: Colors.textSecondary, fontWeight: '600' },
+    backBtnLight: { marginTop: 20, padding: 10 },
+
+    header: { paddingHorizontal: 20, paddingBottom: 24, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, elevation: 5 },
+    headerBackBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
+    headerTitleWrap: { marginTop: 16 },
+    headerTitle: { fontSize: 24, fontWeight: '900', color: '#FFF' },
+    headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '600' },
+
+    progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 24, paddingHorizontal: 30 },
+    progressDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+    progressDotActive: { backgroundColor: Colors.primary },
+    progressDotPassed: { backgroundColor: '#10B981' },
+    progressText: { fontSize: 12, fontWeight: '800', color: Colors.textSecondary },
+    progressLine: { flex: 1, height: 4, backgroundColor: '#E2E8F0', marginHorizontal: -2, zIndex: 1 },
+    progressLineActive: { backgroundColor: Colors.primary },
+
+    card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 24, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
+    pageInfo: { marginBottom: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: 16 },
+    pageTitle: { fontSize: 20, fontWeight: '900', color: Colors.text, textTransform: 'capitalize' },
+    pageDesc: { fontSize: 13, color: Colors.textSecondary, marginTop: 6, lineHeight: 18 },
+
+    formContent: { gap: 16 },
+    inputGroup: { marginBottom: 4 },
+    label: { fontSize: 14, fontWeight: '700', color: Colors.textSecondary, marginBottom: 8, paddingLeft: 4 },
+    required: { color: Colors.error },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 16, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+    inputActive: { borderColor: Colors.primary, backgroundColor: '#FFF' },
+    inputText: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.text, padding: 0 },
+
+    footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#FFF', flexDirection: 'row', gap: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+    backBtnFooter: { flex: 0.4, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 16, borderWidth: 1.5, borderColor: '#E2E8F0' },
+    backBtnText: { fontSize: 16, fontWeight: '700', color: Colors.textSecondary },
+    nextBtn: { flex: 1, borderRadius: 16, overflow: 'hidden' },
+    submitBtn: { flex: 1.5 },
+    btnGradient: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10 },
+    btnText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
+
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingBottom: 40, maxHeight: '70%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+    modalTitle: { fontSize: 18, fontWeight: '800', color: Colors.text },
+    optionItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+    optionText: { fontSize: 15, color: Colors.textSecondary, fontWeight: '600' },
+    optionTextActive: { color: Colors.primary, fontWeight: '700' },
 });

@@ -12,8 +12,9 @@ export default function AdminLayout() {
                 headerBackTitle: 'Back',
             }}
         >
+            <Stack.Screen name="admission-management" options={{ title: 'Admission Management', headerShown: false }} />
             <Stack.Screen name="home-management" options={{ title: 'Home Management' }} />
-            <Stack.Screen name="registrations" options={{ title: 'Student Registrations' }} />
+            <Stack.Screen name="registration-settings" options={{ title: 'Registration Settings', headerShown: false }} />
             <Stack.Screen name="complaints" options={{ title: 'Complaints Management' }} />
         </Stack>
     );

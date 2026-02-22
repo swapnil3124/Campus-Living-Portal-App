@@ -105,14 +105,21 @@ export interface Admission {
     enrollment: string;
     email: string;
     phone: string;
-    department: string;
-    prevMarks: string;
-    distance: string;
-    parentName: string;
+    dob: string;
+    gender: string;
     category: string;
-    gender: 'male' | 'female' | 'other';
-    year: '1st' | '2nd' | '3rd';
-    additionalData: Record<string, any>;
+    instituteName: string;
+    department: string;
+    yearOfStudy: string;
+    prevMarks: string;
+    sscPercentage: string;
+    hostelType: string;
+    distance: string;
+    permanentAddress: string;
+    parentName: string;
+    parentPhone: string;
+    hasMedicalCondition: boolean;
+    medicalDescription: string;
     status: 'pending' | 'verified' | 'accepted' | 'rejected';
     appliedAt: string;
 }

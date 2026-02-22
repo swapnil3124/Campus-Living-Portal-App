@@ -18,46 +18,24 @@ import {
     LogOut,
     UserCircle,
     ShieldCheck,
-    MessageSquare,
-    UtensilsCrossed,
-    BedDouble,
-    CalendarDays,
-    Siren,
     ChevronRight,
     Lock,
     Smartphone,
     Building2,
-    Home,
-    FileText,
-    ClipboardList,
-    Users,
+    Mail,
+    Phone,
+    MapPin,
+    Calendar,
+    Briefcase,
+    Zap,
+    Key,
+    User2,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { boysHostelNames, girlsHostelNames } from '@/mocks/data';
-const dashboardItems = [
-    { key: 'profile', label: 'My Profile', icon: UserCircle, color: '#1565C0', bg: '#E3F2FD', route: '/student/profile' },
-    { key: 'complaints', label: 'Complaints', icon: MessageSquare, color: '#E65100', bg: '#FFF3E0', route: '/student/complaints' },
-    { key: 'mess', label: 'Mess', icon: UtensilsCrossed, color: '#2E7D32', bg: '#E8F5E9', route: '/student/mess' },
-    { key: 'room', label: 'Room Info', icon: BedDouble, color: '#6A1B9A', bg: '#F3E5F5', route: '/student/room' },
-    { key: 'leave', label: 'Leave', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/student/leave' },
-    { key: 'emergency', label: 'Emergency', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/student/emergency' },
-];
-
-const adminDashboardItems = [
-    { key: 'profile', label: 'Admin Profile', icon: UserCircle, color: '#1565C0', bg: '#E3F2FD', route: '/admin/profile' },
-    { key: 'students', label: 'Student Management', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
-    { key: 'notices', label: 'Notice Management', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
-    { key: 'complaints', label: 'Complaint Management', icon: MessageSquare, color: '#E65100', bg: '#FFF3E0', route: '/admin/complaints' },
-    { key: 'mess', label: 'Mess Management', icon: UtensilsCrossed, color: '#D84315', bg: '#FBE9E7', route: '/admin/mess' },
-    { key: 'hostel', label: 'Room & Hostel Mgmt', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
-    { key: 'leave', label: 'Leave Management', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave' },
-    { key: 'emergency', label: 'Emergency Mgmt', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/admin/emergency' },
-    { key: 'exit', label: 'Hostel Exit Mgmt', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/admin/exit' },
-];
-
 
 function LoginScreen() {
     const { login, isLoginLoading } = useAuth();
@@ -93,7 +71,7 @@ function LoginScreen() {
             return;
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        login('admin');
+        login('admin', selectedHostel);
     }, [selectedHostel, username, password, login]);
 
     const allHostels = [...boysHostelNames.map(h => ({ name: h, type: 'Boys' })), ...girlsHostelNames.map(h => ({ name: h, type: 'Girls' }))];
@@ -111,7 +89,7 @@ function LoginScreen() {
                     <Text style={styles.loginHeaderTitle}>
                         {loginType ? (loginType === 'student' ? 'Student Login' : 'Admin Login') : 'Login'}
                     </Text>
-                    <Text style={styles.loginHeaderSub}>Access your hostel dashboard</Text>
+                    <Text style={styles.loginHeaderSub}>Access your hostel account</Text>
                 </Animated.View>
             </LinearGradient>
 
@@ -291,33 +269,14 @@ function LoginScreen() {
     );
 }
 
-function StudentDashboard() {
-    const { student, logout } = useAuth();
-    const router = useRouter();
+function ProfileScreen() {
+    const { student, role, logout } = useAuth();
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const cardAnims = useRef(dashboardItems.map(() => new Animated.Value(0))).current;
-    const scaleAnims = useRef(dashboardItems.map(() => new Animated.Value(1))).current;
 
     useEffect(() => {
-        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-        cardAnims.forEach((anim, i) => {
-            Animated.timing(anim, {
-                toValue: 1,
-                duration: 400,
-                delay: 200 + i * 80,
-                useNativeDriver: true,
-            }).start();
-        });
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
     }, []);
-
-    const handlePressIn = (index: number) => {
-        Animated.spring(scaleAnims[index], { toValue: 0.92, useNativeDriver: true }).start();
-    };
-
-    const handlePressOut = (index: number) => {
-        Animated.spring(scaleAnims[index], { toValue: 1, friction: 3, useNativeDriver: true }).start();
-    };
 
     const handleLogout = useCallback(() => {
         Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -333,80 +292,117 @@ function StudentDashboard() {
         ]);
     }, [logout]);
 
+    const ProfileItem = ({ icon: Icon, label, value, color = Colors.primary }: any) => (
+        <View style={styles.profileItem}>
+            <View style={[styles.profileItemIcon, { backgroundColor: color + '12' }]}>
+                <Icon size={20} color={color} />
+            </View>
+            <View style={styles.profileItemContent}>
+                <Text style={styles.profileItemLabel}>{label}</Text>
+                <Text style={styles.profileItemValue}>{value || 'N/A'}</Text>
+            </View>
+        </View>
+    );
+
     return (
         <View style={styles.container}>
             <LinearGradient
-                colors={[Colors.primaryDark, Colors.primary, '#26A69A']}
-                style={[styles.dashHeader, { paddingTop: insets.top + 12 }]}
+                colors={[Colors.primaryDark, Colors.primary]}
+                style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}
             >
-                <Animated.View style={[styles.profileRow, { opacity: fadeAnim }]}>
-                    <Image
-                        source={{ uri: student?.photoUrl }}
-                        style={styles.avatar}
-                        contentFit="cover"
-                    />
-                    <View style={styles.profileInfo}>
-                        <Text style={styles.profileName}>{student?.name ?? 'Student'}</Text>
-                        <Text style={styles.profileEnroll}>{student?.enrollmentNo}</Text>
-                        <View style={styles.profileBadge}>
-                            <View style={styles.statusDot} />
-                            <Text style={styles.profileStatus}>{student?.status === 'active' ? 'Active' : student?.status}</Text>
-                            <Text style={styles.profileHostel}> • {student?.hostelName}</Text>
+                <Animated.View style={[styles.profileHeaderContent, { opacity: fadeAnim }]}>
+                    <View style={styles.avatarContainer}>
+                        {role === 'student' ? (
+                            <Image
+                                source={{ uri: student?.photoUrl }}
+                                style={styles.profileAvatar}
+                                contentFit="cover"
+                            />
+                        ) : (
+                            <View style={styles.adminAvatarCircle}>
+                                <ShieldCheck size={40} color={Colors.white} />
+                            </View>
+                        )}
+                        <View style={styles.statusBadge}>
+                            <View style={styles.statusDotInner} />
+                            <Text style={styles.statusText}>{role === 'student' ? 'Student' : 'Admin'}</Text>
                         </View>
                     </View>
+                    <Text style={styles.profileHeaderName}>
+                        {role === 'student' ? student?.name : 'Administrator'}
+                    </Text>
+                    <Text style={styles.profileHeaderSub}>
+                        {role === 'student' ? student?.enrollmentNo : 'Govt. Poly. Awasari'}
+                    </Text>
                 </Animated.View>
             </LinearGradient>
 
-            <ScrollView contentContainerStyle={styles.dashContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.gridContainer}>
-                    {dashboardItems.map((item, index) => {
-                        const IconComp = item.icon;
-                        return (
-                            <Animated.View
-                                key={item.key}
-                                style={[
-                                    styles.gridItem,
-                                    {
-                                        opacity: cardAnims[index],
-                                        transform: [
-                                            { translateY: cardAnims[index].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
-                                            { scale: scaleAnims[index] },
-                                        ],
-                                    },
-                                ]}
-                            >
-                                <TouchableOpacity
-                                    style={styles.gridCard}
-                                    activeOpacity={0.9}
-                                    onPressIn={() => { handlePressIn(index); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                                    onPressOut={() => handlePressOut(index)}
-                                    onPress={() => router.push(item.route as any)}
-                                    testID={`dash-${item.key}`}
-                                >
-                                    <View style={[styles.gridIconWrap, { backgroundColor: item.bg }]}>
-                                        <IconComp size={26} color={item.color} />
-                                    </View>
-                                    <Text style={styles.gridLabel}>{item.label}</Text>
-                                    <ChevronRight size={14} color={Colors.textLight} style={styles.gridArrow} />
-                                </TouchableOpacity>
-                            </Animated.View>
-                        );
-                    })}
+            <ScrollView contentContainerStyle={styles.profileScrollContent} showsVerticalScrollIndicator={false}>
+                <View style={styles.profileSection}>
+                    <Text style={styles.sectionTitle}>Personal Information</Text>
+                    <View style={styles.card}>
+                        {role === 'student' ? (
+                            <>
+                                <ProfileItem icon={Mail} label="Email Address" value={student?.email} color="#1565C0" />
+                                <ProfileItem icon={Phone} label="Phone Number" value={student?.phone} color="#2E7D32" />
+                                <ProfileItem icon={Calendar} label="Date of Birth" value={student?.dob} color="#E65100" />
+                                <ProfileItem icon={Briefcase} label="Department" value={student?.department} color="#6A1B9A" />
+                                <ProfileItem icon={Zap} label="Academic Year" value={student?.academicYear} color="#00838F" />
+                            </>
+                        ) : (
+                            <>
+                                <ProfileItem icon={Mail} label="Contact Email" value="admin@gpawasari.ac.in" color="#1565C0" />
+                                <ProfileItem icon={Building2} label="Institute" value="Government Polytechnic Awasari" color="#2E7D32" />
+                                <ProfileItem icon={Zap} label="Access Level" value="Full System Access" color="#D84315" />
+                            </>
+                        )}
+                    </View>
                 </View>
 
-                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-                    <LogOut size={18} color={Colors.error} />
-                    <Text style={styles.logoutText}>Logout</Text>
+                {role === 'student' && (
+                    <View style={styles.profileSection}>
+                        <Text style={styles.sectionTitle}>Hostel Details</Text>
+                        <View style={styles.card}>
+                            <ProfileItem icon={Building2} label="Hostel Name" value={student?.hostelName} color="#00897B" />
+                            <ProfileItem icon={Key} label="Room & Bed" value={`Room ${student?.roomNo}, Bed ${student?.bedNumber}`} color="#C62828" />
+                            <ProfileItem icon={MapPin} label="Floor" value={`${student?.floor}${student?.floor === 1 ? 'st' : student?.floor === 2 ? 'nd' : 'rd'} Floor`} color="#455A64" />
+                        </View>
+                    </View>
+                )}
+
+                <View style={styles.profileSection}>
+                    <Text style={styles.sectionTitle}>Account Settings</Text>
+                    <View style={styles.card}>
+                        <TouchableOpacity style={styles.settingRow}>
+                            <View style={[styles.settingIcon, { backgroundColor: '#F5F5F5' }]}>
+                                <Lock size={18} color={Colors.textSecondary} />
+                            </View>
+                            <Text style={styles.settingLabel}>Change Password</Text>
+                            <ChevronRight size={18} color={Colors.textLight} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.settingRow}>
+                            <View style={[styles.settingIcon, { backgroundColor: '#F5F5F5' }]}>
+                                <User2 size={18} color={Colors.textSecondary} />
+                            </View>
+                            <Text style={styles.settingLabel}>Update Contact Info</Text>
+                            <ChevronRight size={18} color={Colors.textLight} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+                    <LogOut size={20} color={Colors.error} />
+                    <Text style={styles.logoutButtonText}>Sign Out</Text>
                 </TouchableOpacity>
 
-                <View style={{ height: 30 }} />
+                <View style={{ height: 40 }} />
             </ScrollView>
         </View>
     );
 }
 
 export default function AccountScreen() {
-    const { isLoggedIn, isLoading, role } = useAuth();
+    const { isLoggedIn, isLoading } = useAuth();
 
     if (isLoading) {
         return (
@@ -417,133 +413,13 @@ export default function AccountScreen() {
     }
 
     if (!isLoggedIn) return <LoginScreen />;
-    if (role === 'admin') return <AdminDashboard />;
-    return <StudentDashboard />;
+    return <ProfileScreen />;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin Dashboard Component
-// ─────────────────────────────────────────────────────────────────────────────
-function AdminDashboard() {
-    const { logout } = useAuth();
-    const router = useRouter();
-    const insets = useSafeAreaInsets();
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const cardAnims = useRef(adminDashboardItems.map(() => new Animated.Value(0))).current;
-    const scaleAnims = useRef(adminDashboardItems.map(() => new Animated.Value(1))).current;
-
-    useEffect(() => {
-        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-        cardAnims.forEach((anim, i) => {
-            Animated.timing(anim, { toValue: 1, duration: 400, delay: 200 + i * 80, useNativeDriver: true }).start();
-        });
-    }, []);
-
-    const handlePressIn = (i: number) => Animated.spring(scaleAnims[i], { toValue: 0.92, useNativeDriver: true }).start();
-    const handlePressOut = (i: number) => Animated.spring(scaleAnims[i], { toValue: 1, friction: 3, useNativeDriver: true }).start();
-
-    const handleLogout = useCallback(() => {
-        Alert.alert('Logout', 'Are you sure you want to logout as Admin?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Logout',
-                style: 'destructive',
-                onPress: () => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    logout();
-                },
-            },
-        ]);
-    }, [logout]);
-
-    return (
-        <View style={styles.container}>
-            <LinearGradient
-                colors={['#004d40', Colors.primary, '#26A69A']}
-                style={[styles.dashHeader, { paddingTop: insets.top + 12 }]}
-            >
-                <Animated.View style={[{ opacity: fadeAnim }]}>
-                    <View style={styles.adminBadgeRow}>
-                        <View style={styles.adminIconWrap}>
-                            <ShieldCheck size={28} color={Colors.white} />
-                        </View>
-                        <View style={styles.profileInfo}>
-                            <Text style={styles.profileName}>Administrator</Text>
-                            <Text style={styles.profileEnroll}>Government Polytechnic Awasari</Text>
-                            <View style={styles.profileBadge}>
-                                <View style={[styles.statusDot, { backgroundColor: '#69F0AE' }]} />
-                                <Text style={styles.profileStatus}>Admin Panel Access</Text>
-                            </View>
-                        </View>
-                    </View>
-                </Animated.View>
-            </LinearGradient>
-
-            <ScrollView contentContainerStyle={styles.dashContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.adminStatsRow}>
-                    <View style={styles.adminStatCard}>
-                        <Text style={styles.adminStatVal}>12</Text>
-                        <Text style={styles.adminStatLab}>Pending Registrations</Text>
-                    </View>
-                    <View style={styles.adminStatCard}>
-                        <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
-                        <Text style={styles.adminStatLab}>Open Complaints</Text>
-                    </View>
-                </View>
-
-                <Text style={styles.adminSectionTitle}>Management Tools</Text>
-                <View style={styles.gridContainer}>
-                    {adminDashboardItems.map((item, index) => {
-                        const IconComp = item.icon;
-                        return (
-                            <Animated.View
-                                key={item.key}
-                                style={[
-                                    styles.gridItem,
-                                    {
-                                        opacity: cardAnims[index],
-                                        transform: [
-                                            { translateY: cardAnims[index].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
-                                            { scale: scaleAnims[index] },
-                                        ],
-                                    },
-                                ]}
-                            >
-                                <TouchableOpacity
-                                    style={styles.gridCard}
-                                    activeOpacity={0.9}
-                                    onPressIn={() => { handlePressIn(index); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-                                    onPressOut={() => handlePressOut(index)}
-                                    onPress={() => router.push(item.route as any)}
-                                    testID={`admin-${item.key}`}
-                                >
-                                    <View style={[styles.gridIconWrap, { backgroundColor: item.bg }]}>
-                                        <IconComp size={26} color={item.color} />
-                                    </View>
-                                    <Text style={styles.gridLabel}>{item.label}</Text>
-                                    <ChevronRight size={14} color={Colors.textLight} style={styles.gridArrow} />
-                                </TouchableOpacity>
-                            </Animated.View>
-                        );
-                    })}
-                </View>
-
-                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-                    <LogOut size={18} color={Colors.error} />
-                    <Text style={styles.logoutText}>Logout Admin Session</Text>
-                </TouchableOpacity>
-
-                <View style={{ height: 30 }} />
-            </ScrollView>
-        </View>
-    );
-}
-
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: '#F8FAFC',
     },
     center: {
         alignItems: 'center',
@@ -714,170 +590,168 @@ const styles = StyleSheet.create({
         fontWeight: '600' as const,
         color: Colors.white,
     },
-    dashHeader: {
-        paddingHorizontal: 20,
-        paddingBottom: 24,
+    profileHeader: {
+        paddingHorizontal: 30,
+        paddingBottom: 40,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
     },
-    profileRow: {
-        flexDirection: 'row',
+    profileHeaderContent: {
         alignItems: 'center',
     },
-    avatar: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.4)',
-        marginRight: 14,
+    avatarContainer: {
+        marginBottom: 16,
+        position: 'relative',
     },
-    profileInfo: {
-        flex: 1,
+    profileAvatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        borderWidth: 4,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
-    profileName: {
-        fontSize: 20,
-        fontWeight: '700' as const,
-        color: Colors.white,
-    },
-    profileEnroll: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.8)',
-        marginTop: 2,
-    },
-    profileBadge: {
-        flexDirection: 'row',
+    adminAvatarCircle: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         alignItems: 'center',
-        marginTop: 6,
+        justifyContent: 'center',
+        borderWidth: 4,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
-    statusDot: {
-        width: 7,
-        height: 7,
-        borderRadius: 4,
-        backgroundColor: '#69F0AE',
-        marginRight: 6,
-    },
-    profileStatus: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.8)',
-        fontWeight: '500' as const,
-    },
-    profileHostel: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.6)',
-    },
-    dashContent: {
-        padding: 16,
-    },
-    gridContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-    },
-    gridItem: {
-        width: '48%' as any,
-        flexGrow: 1,
-        flexBasis: '46%' as any,
-    },
-    gridCard: {
+    statusBadge: {
+        position: 'absolute',
+        bottom: 0,
         backgroundColor: Colors.white,
-        borderRadius: 16,
-        padding: 18,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 6,
         shadowColor: Colors.black,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 2,
-        minHeight: 120,
-        justifyContent: 'center',
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        alignSelf: 'center',
     },
-    gridIconWrap: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
+    statusDotInner: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#10B981',
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: '700' as const,
+        color: Colors.text,
+        textTransform: 'uppercase' as const,
+    },
+    profileHeaderName: {
+        fontSize: 24,
+        fontWeight: '800' as const,
+        color: Colors.white,
+        textAlign: 'center',
+    },
+    profileHeaderSub: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 4,
+        textAlign: 'center',
+    },
+    profileScrollContent: {
+        padding: 20,
+    },
+    profileSection: {
+        marginBottom: 24,
+    },
+    sectionTitle: {
+        fontSize: 15,
+        fontWeight: '700' as const,
+        color: Colors.textSecondary,
+        marginBottom: 12,
+        marginLeft: 4,
+        textTransform: 'uppercase' as const,
+        letterSpacing: 1,
+    },
+    card: {
+        backgroundColor: Colors.white,
+        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        shadowColor: Colors.black,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 10,
+        elevation: 2,
+    },
+    profileItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    profileItemIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 10,
+        marginRight: 16,
     },
-    gridLabel: {
-        fontSize: 14,
+    profileItemContent: {
+        flex: 1,
+    },
+    profileItemLabel: {
+        fontSize: 12,
+        color: Colors.textLight,
+        fontWeight: '500' as const,
+    },
+    profileItemValue: {
+        fontSize: 15,
+        color: Colors.text,
+        fontWeight: '600' as const,
+        marginTop: 2,
+    },
+    settingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    settingIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 14,
+    },
+    settingLabel: {
+        flex: 1,
+        fontSize: 15,
         fontWeight: '600' as const,
         color: Colors.text,
     },
-    gridArrow: {
-        position: 'absolute',
-        top: 14,
-        right: 14,
-    },
-    logoutBtn: {
+    logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
-        backgroundColor: Colors.errorLight,
-        borderRadius: 14,
-        paddingVertical: 16,
-        marginTop: 20,
+        gap: 10,
+        backgroundColor: '#FFF1F2',
+        paddingVertical: 18,
+        borderRadius: 20,
+        marginTop: 10,
+        borderWidth: 1,
+        borderColor: '#FECDD3',
     },
-    logoutText: {
-        fontSize: 15,
-        fontWeight: '600' as const,
+    logoutButtonText: {
         color: Colors.error,
-    },
-    // ─────────────────────────────────────────────────────────────────────────
-    // Admin Specific Styles
-    // ─────────────────────────────────────────────────────────────────────────
-    adminBadgeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    adminIconWrap: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.3)',
-    },
-    adminSectionTitle: {
-        fontSize: 13,
+        fontSize: 16,
         fontWeight: '700' as const,
-        color: Colors.textSecondary,
-        textTransform: 'uppercase' as const,
-        letterSpacing: 1,
-        marginBottom: 16,
-        marginLeft: 4,
-        marginTop: 8,
-    },
-    adminStatsRow: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 24,
-    },
-    adminStatCard: {
-        flex: 1,
-        backgroundColor: Colors.white,
-        borderRadius: 16,
-        padding: 16,
-        alignItems: 'center',
-        shadowColor: Colors.black,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    adminStatVal: {
-        fontSize: 24,
-        fontWeight: '800' as const,
-        color: Colors.primary,
-    },
-    adminStatLab: {
-        fontSize: 11,
-        color: Colors.textSecondary,
-        textAlign: 'center',
-        marginTop: 4,
-        fontWeight: '600' as const,
     },
 });
