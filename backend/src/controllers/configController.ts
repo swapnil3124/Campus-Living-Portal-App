@@ -18,6 +18,14 @@ export const getConfig = async (req: Request, res: Response) => {
                         categories: ['Open', 'OBC', 'SC', 'ST', 'VJNT', 'SBC', 'EWS']
                     }
                 });
+            } else if (key === 'merit_list') {
+                config = new SystemConfig({
+                    key,
+                    value: {
+                        departmentSeats: {},
+                        categoryPercentages: {}
+                    }
+                });
             } else {
                 return res.status(404).json({ message: 'Config not found' });
             }

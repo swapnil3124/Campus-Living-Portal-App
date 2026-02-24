@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -53,9 +53,31 @@ const adminDashboardItems = [
     { key: 'complaints', label: 'Complaint Management', icon: MessageSquare, color: '#E65100', bg: '#FFF3E0', route: '/admin/complaints' },
     { key: 'mess', label: 'Mess Management', icon: UtensilsCrossed, color: '#D84315', bg: '#FBE9E7', route: '/admin/mess' },
     { key: 'hostel', label: 'Room & Hostel Mgmt', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
-    { key: 'leave', label: 'Leave Management', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave' },
+    { key: 'leave', label: 'Leave Management', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
     { key: 'emergency', label: 'Emergency Mgmt', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/admin/emergency' },
     { key: 'exit', label: 'Hostel Exit Mgmt', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/admin/exit' },
+];
+
+const rectorDashboardItems = [
+    { key: 'admission', label: 'Admission Review', icon: ClipboardList, color: '#00897B', bg: '#E0F2F1', route: '/admin/admission-management' },
+    { key: 'students', label: 'Student Directory', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
+    { key: 'notices', label: 'Official Notices', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
+    { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
+    { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
+];
+
+const contractorDashboardItems = [
+    { key: 'mess', label: 'Menu Management', icon: UtensilsCrossed, color: '#D84315', bg: '#FBE9E7', route: '/admin/mess' },
+    { key: 'students', label: 'Student Count', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
+    { key: 'complaints', label: 'Food Feedback', icon: MessageSquare, color: '#E65100', bg: '#FFF3E0', route: '/admin/complaints' },
+    { key: 'notices', label: 'Mess Notices', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
+];
+
+const watchmanDashboardItems = [
+    { key: 'exit', label: 'Entry/Exit Logs', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/admin/exit' },
+    { key: 'emergency', label: 'Emergency Alerts', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/admin/emergency' },
+    { key: 'students', label: 'Student Verifier', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
+    { key: 'notices', label: 'Station Orders', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
 ];
 
 function StudentDashboard() {
@@ -155,26 +177,47 @@ function StudentDashboard() {
     );
 }
 
-function AdminDashboard() {
+function StaffDashboard() {
     const router = useRouter();
+    const { role } = useAuth();
     const { admissions, fetchAdmissions } = useAdmissionStore();
     const pendingAdmissions = admissions.filter(a => a.status === 'pending').length;
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const cardAnims = useRef(adminDashboardItems.map(() => new Animated.Value(0))).current;
-    const scaleAnims = useRef(adminDashboardItems.map(() => new Animated.Value(1))).current;
+
+    const items = useMemo(() => {
+        switch (role) {
+            case 'rector': return rectorDashboardItems;
+            case 'contractor': return contractorDashboardItems;
+            case 'watchman': return watchmanDashboardItems;
+            default: return adminDashboardItems;
+        }
+    }, [role]);
+
+    const cardAnims = useRef(items.map(() => new Animated.Value(0))).current;
+    const scaleAnims = useRef(items.map(() => new Animated.Value(1))).current;
+
+    const roleInfo = useMemo(() => {
+        switch (role) {
+            case 'rector': return { title: 'Rector', icon: UserCircle, color: '#7B1FA2' };
+            case 'contractor': return { title: 'Mess Contractor', icon: UtensilsCrossed, color: '#2E7D32' };
+            case 'watchman': return { title: 'Watchman', icon: Building2, color: '#E65100' };
+            default: return { title: 'Warden', icon: ShieldCheck, color: Colors.primary };
+        }
+    }, [role]);
 
     useEffect(() => {
-        fetchAdmissions();
+        if (role === 'admin' || role === 'rector') fetchAdmissions();
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
         cardAnims.forEach((anim, i) => {
             Animated.timing(anim, { toValue: 1, duration: 400, delay: 200 + i * 80, useNativeDriver: true }).start();
         });
-    }, []);
+    }, [role, items]);
 
     const handlePressIn = (i: number) => Animated.spring(scaleAnims[i], { toValue: 0.92, useNativeDriver: true }).start();
     const handlePressOut = (i: number) => Animated.spring(scaleAnims[i], { toValue: 1, friction: 3, useNativeDriver: true }).start();
 
+    const Icon = roleInfo.icon;
 
     return (
         <View style={styles.container}>
@@ -184,15 +227,15 @@ function AdminDashboard() {
             >
                 <Animated.View style={[{ opacity: fadeAnim }]}>
                     <View style={styles.adminBadgeRow}>
-                        <View style={styles.adminIconWrap}>
-                            <ShieldCheck size={28} color={Colors.white} />
+                        <View style={[styles.adminIconWrap, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                            <Icon size={28} color={Colors.white} />
                         </View>
                         <View style={styles.profileInfo}>
-                            <Text style={styles.profileName}>Administrator</Text>
+                            <Text style={styles.profileName}>{roleInfo.title}</Text>
                             <Text style={styles.profileEnroll}>Government Polytechnic Awasari</Text>
                             <View style={styles.profileBadge}>
                                 <View style={[styles.statusDot, { backgroundColor: '#69F0AE' }]} />
-                                <Text style={styles.profileStatus}>Admin Panel Access</Text>
+                                <Text style={styles.profileStatus}>{roleInfo.title} Control Panel</Text>
                             </View>
                         </View>
                     </View>
@@ -200,20 +243,22 @@ function AdminDashboard() {
             </LinearGradient>
 
             <ScrollView contentContainerStyle={styles.dashContent} showsVerticalScrollIndicator={false}>
-                <View style={styles.adminStatsRow}>
-                    <View style={styles.adminStatCard}>
-                        <Text style={styles.adminStatVal}>{pendingAdmissions}</Text>
-                        <Text style={styles.adminStatLab}>Pending Admissions</Text>
+                {(role === 'admin' || role === 'rector') && (
+                    <View style={styles.adminStatsRow}>
+                        <View style={styles.adminStatCard}>
+                            <Text style={styles.adminStatVal}>{pendingAdmissions}</Text>
+                            <Text style={styles.adminStatLab}>Pending Admissions</Text>
+                        </View>
+                        <View style={styles.adminStatCard}>
+                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
+                            <Text style={styles.adminStatLab}>Open Complaints</Text>
+                        </View>
                     </View>
-                    <View style={styles.adminStatCard}>
-                        <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
-                        <Text style={styles.adminStatLab}>Open Complaints</Text>
-                    </View>
-                </View>
+                )}
 
                 <Text style={styles.adminSectionTitle}>Management Tools</Text>
                 <View style={styles.gridContainer}>
-                    {adminDashboardItems.map((item, index) => {
+                    {items.map((item, index) => {
                         const IconComp = item.icon;
                         return (
                             <Animated.View
@@ -221,10 +266,10 @@ function AdminDashboard() {
                                 style={[
                                     styles.gridItem,
                                     {
-                                        opacity: cardAnims[index],
+                                        opacity: cardAnims[index] || 1,
                                         transform: [
-                                            { translateY: cardAnims[index].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
-                                            { scale: scaleAnims[index] },
+                                            { translateY: (cardAnims[index] || new Animated.Value(1)).interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                                            { scale: scaleAnims[index] || 1 },
                                         ],
                                     },
                                 ]}
@@ -235,7 +280,7 @@ function AdminDashboard() {
                                     onPressIn={() => { handlePressIn(index); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                                     onPressOut={() => handlePressOut(index)}
                                     onPress={() => router.push(item.route as any)}
-                                    testID={`admin-${item.key}`}
+                                    testID={`staff-${item.key}`}
                                 >
                                     <View style={[styles.gridIconWrap, { backgroundColor: item.bg }]}>
                                         <IconComp size={26} color={item.color} />
@@ -247,7 +292,6 @@ function AdminDashboard() {
                         );
                     })}
                 </View>
-
 
                 <View style={{ height: 30 }} />
             </ScrollView>
@@ -297,8 +341,8 @@ export default function DashboardScreen() {
     }
 
     if (!isLoggedIn) return <LockedDashboard />;
-    if (role === 'admin') return <AdminDashboard />;
-    return <StudentDashboard />;
+    if (role === 'student') return <StudentDashboard />;
+    return <StaffDashboard />;
 }
 
 const styles = StyleSheet.create({

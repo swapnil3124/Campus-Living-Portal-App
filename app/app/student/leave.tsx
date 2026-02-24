@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
     View,
     Text,
@@ -6,6 +6,8 @@ import {
     ScrollView,
     Animated,
     TouchableOpacity,
+    Modal,
+    Alert,
 } from 'react-native';
 import {
     Plus,
@@ -16,11 +18,17 @@ import {
     CircleCheck as CheckCircle2,
     CircleX as XCircle,
     Timer,
+    User,
+    Home,
+    Smartphone,
+    X,
+    ShieldCheck,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
-import { mockLeaves } from '@/mocks/data';
+import { useLeaveStore } from '@/store/leave-store';
+import { mockStudent } from '@/mocks/data';
 import { LeaveApplication } from '@/constants/types';
 
 const statusConfig: Record<string, { bg: string; text: string; label: string; icon: React.ReactNode }> = {
@@ -29,7 +37,75 @@ const statusConfig: Record<string, { bg: string; text: string; label: string; ic
     rejected: { bg: Colors.errorLight, text: Colors.error, label: 'Rejected', icon: <XCircle size={14} color={Colors.error} /> },
 };
 
-function LeaveCard({ leave, index }: { leave: LeaveApplication; index: number }) {
+function GatePassModal({ visible, onClose, leave }: { visible: boolean; onClose: () => void; leave: LeaveApplication | null }) {
+    if (!leave) return null;
+
+    return (
+        <Modal visible={visible} transparent animationType="slide">
+            <View style={styles.modalOverlay}>
+                <View style={styles.gatePassContainer}>
+                    <View style={styles.gatePassHeader}>
+                        <ShieldCheck size={24} color={Colors.white} />
+                        <Text style={styles.gatePassHeaderTitle}>DIGITAL GATE PASS</Text>
+                        <TouchableOpacity onPress={onClose}>
+                            <X size={24} color={Colors.white} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.gatePassContent}>
+                        <View style={[styles.qrPlaceholder, { height: 100, backgroundColor: Colors.background, marginBottom: 20 }]}>
+                            <Text style={{ color: Colors.textLight }}>[ QR CODE ]</Text>
+                        </View>
+
+                        <View style={styles.passRow}>
+                            <View style={styles.passCol}>
+                                <Text style={styles.passLabel}>STUDENT NAME</Text>
+                                <Text style={styles.passValue}>{mockStudent.name}</Text>
+                            </View>
+                            <View style={styles.passCol}>
+                                <Text style={styles.passLabel}>ROOM NO</Text>
+                                <Text style={styles.passValue}>{mockStudent.roomNo}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.passDivider} />
+
+                        <View style={styles.passRow}>
+                            <View style={styles.passCol}>
+                                <Text style={styles.passLabel}>OUT TIME</Text>
+                                <Text style={styles.passValue}>{leave.fromDate}</Text>
+                            </View>
+                            <View style={styles.passCol}>
+                                <Text style={styles.passLabel}>IN TIME</Text>
+                                <Text style={styles.passValue}>{leave.toDate}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.passDivider} />
+
+                        <View style={styles.signatureSection}>
+                            <Text style={styles.passLabel}>WARDEN SIGNATURE</Text>
+                            <View style={styles.signatureWrap}>
+                                <Text style={styles.signatureText}>Digitally Signed by Warden</Text>
+                                <Text style={styles.signatureSubText}>Campus Living Portal Verified</Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity style={styles.downloadBtn} onPress={() => {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                            Alert.alert('Success', 'Gate Pass downloaded to your gallery');
+                        }}>
+                            <Download size={18} color={Colors.white} />
+                            <Text style={styles.downloadBtnText}>Save to Device</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+function LeaveCard({ leave, index, onShowPass }: { leave: LeaveApplication; index: number, onShowPass: (l: LeaveApplication) => void }) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -82,12 +158,19 @@ function LeaveCard({ leave, index }: { leave: LeaveApplication; index: number })
                         <Text style={styles.detailText}>{leave.destination}</Text>
                     </View>
                     <Text style={styles.leaveReason}>{leave.reason}</Text>
+
+                    {leave.status === 'rejected' && leave.rejectionReason && (
+                        <View style={styles.rejectionBox}>
+                            <Text style={styles.rejectionTitle}>Reason for Rejection:</Text>
+                            <Text style={styles.rejectionText}>{leave.rejectionReason}</Text>
+                        </View>
+                    )}
                 </View>
 
                 {leave.status === 'approved' && (
                     <TouchableOpacity
                         style={styles.gatePassBtn}
-                        onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)}
+                        onPress={() => onShowPass(leave)}
                         activeOpacity={0.85}
                     >
                         <Download size={14} color={Colors.primary} />
@@ -101,14 +184,57 @@ function LeaveCard({ leave, index }: { leave: LeaveApplication; index: number })
 
 export default function LeaveScreen() {
     const router = useRouter();
+    const { leaves, fetchLeaves } = useLeaveStore();
+    const [selectedLeave, setSelectedLeave] = useState<LeaveApplication | null>(null);
+    const [passVisible, setPassVisible] = useState(false);
+
+    useEffect(() => {
+        fetchLeaves();
+    }, []);
+
+    // Filter leaves for the current student
+    const studentLeaves = useMemo(() => {
+        return leaves.filter(l => l.studentId === mockStudent.id);
+    }, [leaves]);
+
+    const totalLeaves = studentLeaves.filter(l => l.status === 'approved').length;
+    const pendingLeaves = studentLeaves.filter(l => l.status === 'pending').length;
+
+    const handleShowPass = (leave: LeaveApplication) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setSelectedLeave(leave);
+        setPassVisible(true);
+    };
 
     return (
         <View style={styles.container}>
+            <View style={styles.statsContainer}>
+                <View style={[styles.statCard, { backgroundColor: Colors.primary + '10' }]}>
+                    <View style={[styles.statIcon, { backgroundColor: Colors.primary }]}>
+                        <CalendarDays size={20} color={Colors.white} />
+                    </View>
+                    <View>
+                        <Text style={styles.statValue}>{totalLeaves}</Text>
+                        <Text style={styles.statLabel}>Total Leaves</Text>
+                    </View>
+                </View>
+                <View style={[styles.statCard, { backgroundColor: Colors.warningLight }]}>
+                    <View style={[styles.statIcon, { backgroundColor: '#E65100' }]}>
+                        <Clock size={20} color={Colors.white} />
+                    </View>
+                    <View>
+                        <Text style={styles.statValue}>{pendingLeaves}</Text>
+                        <Text style={styles.statLabel}>Pending</Text>
+                    </View>
+                </View>
+            </View>
+
             <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-                {mockLeaves.map((leave, index) => (
-                    <LeaveCard key={leave.id} leave={leave} index={index} />
+                <Text style={styles.sectionTitle}>Application History</Text>
+                {studentLeaves.map((leave, index) => (
+                    <LeaveCard key={leave.id} leave={leave} index={index} onShowPass={handleShowPass} />
                 ))}
-                {mockLeaves.length === 0 && (
+                {studentLeaves.length === 0 && (
                     <View style={styles.emptyState}>
                         <CalendarDays size={48} color={Colors.textLight} />
                         <Text style={styles.emptyText}>No leave applications</Text>
@@ -128,6 +254,12 @@ export default function LeaveScreen() {
             >
                 <Plus size={24} color={Colors.white} />
             </TouchableOpacity>
+
+            <GatePassModal
+                visible={passVisible}
+                onClose={() => setPassVisible(false)}
+                leave={selectedLeave}
+            />
         </View>
     );
 }
@@ -265,5 +397,155 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.35,
         shadowRadius: 8,
         elevation: 6,
+    },
+    statsContainer: {
+        flexDirection: 'row',
+        padding: 16,
+        gap: 12,
+    },
+    statCard: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 16,
+        gap: 12,
+    },
+    statIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: Colors.text,
+    },
+    statLabel: {
+        fontSize: 12,
+        color: Colors.textSecondary,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text,
+        marginBottom: 16,
+    },
+    rejectionBox: {
+        backgroundColor: Colors.errorLight,
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 10,
+        borderLeftWidth: 3,
+        borderLeftColor: Colors.error,
+    },
+    rejectionTitle: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: Colors.error,
+        marginBottom: 2,
+    },
+    rejectionText: {
+        fontSize: 13,
+        color: Colors.text,
+        opacity: 0.8,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center',
+        padding: 20,
+    },
+    gatePassContainer: {
+        backgroundColor: Colors.white,
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
+    gatePassHeader: {
+        backgroundColor: Colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 20,
+    },
+    gatePassHeaderTitle: {
+        color: Colors.white,
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: 1,
+    },
+    gatePassContent: {
+        padding: 24,
+    },
+    qrPlaceholder: {
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        borderStyle: 'dashed',
+    },
+    passRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+    },
+    passCol: {
+        flex: 1,
+    },
+    passLabel: {
+        fontSize: 10,
+        color: Colors.textLight,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    passValue: {
+        fontSize: 14,
+        color: Colors.text,
+        fontWeight: '700',
+    },
+    passDivider: {
+        height: 1,
+        backgroundColor: Colors.border,
+        marginBottom: 16,
+    },
+    signatureSection: {
+        marginBottom: 24,
+    },
+    signatureWrap: {
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: Colors.background,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: Colors.border,
+    },
+    signatureText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.primary,
+        fontStyle: 'italic',
+    },
+    signatureSubText: {
+        fontSize: 10,
+        color: Colors.textLight,
+        marginTop: 2,
+    },
+    downloadBtn: {
+        backgroundColor: Colors.primary,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        paddingVertical: 14,
+        borderRadius: 12,
+    },
+    downloadBtnText: {
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: '600',
     },
 });

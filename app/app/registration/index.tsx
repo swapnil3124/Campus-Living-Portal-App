@@ -12,6 +12,7 @@ import {
     FlatList,
     Animated,
     Dimensions,
+    Image,
     Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,9 +32,10 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -128,11 +130,36 @@ export default function RegistrationScreen() {
 
     const validateStep = () => {
         if (!currentPage) return false;
-        const missing = currentPage.fields.find(f => f.required && !formData[f.id]);
-        if (missing) {
-            Alert.alert('Required Field', `Please fill in "${missing.label}" to proceed.`);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            return false;
+
+        for (const field of currentPage.fields) {
+            const value = formData[field.id];
+
+            if (field.required && !value) {
+                Alert.alert('Required Field', `Please fill in "${field.label}" to proceed.`);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                return false;
+            }
+
+            if (value) {
+                // Enrollment Number validation
+                if (field.id === 'enrollment' || field.label.toLowerCase().includes('enrollment')) {
+                    if (!/^\d+$/.test(value.toString())) {
+                        Alert.alert('Invalid Input', 'Enrollment Number must contain only digits.');
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        return false;
+                    }
+                }
+
+                // Email validation
+                if (field.type === 'email' || field.label.toLowerCase().includes('email')) {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(value)) {
+                        Alert.alert('Invalid Email', 'Please enter a valid email address.');
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        return false;
+                    }
+                }
+            }
         }
         return true;
     };
@@ -155,18 +182,33 @@ export default function RegistrationScreen() {
         }
     };
 
-    const handleFilePick = async (fieldId: string) => {
+    const handleFilePick = async (fieldId: string, fieldType: string) => {
         try {
+            const isImageOnly = fieldType === 'image' || fieldId === 'studentPhoto' || fieldId.toLowerCase().includes('photo');
+
             const result = await DocumentPicker.getDocumentAsync({
-                type: ['application/pdf', 'image/*'],
+                type: isImageOnly ? ['image/*'] : ['application/pdf', 'image/*'],
                 copyToCacheDirectory: true,
             });
 
             if (!result.canceled) {
                 const asset = result.assets[0];
-                console.log('Picked file URI:', asset.uri);
 
-                // Convert to base64 for persistent storage
+                // Size Check (50KB limit)
+                const sizeLimit = 50 * 1024; // 51200 bytes
+                if (asset.size && asset.size > sizeLimit) {
+                    Alert.alert('File Too Large', `The selected file is ${(asset.size / 1024).toFixed(1)}KB. Please select a file under 50KB for smooth processing.`);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    return;
+                }
+
+                // Image Only Check
+                if (isImageOnly && !asset.mimeType?.startsWith('image/')) {
+                    Alert.alert('Invalid Format', 'This field only accepts image files (JPG, PNG, WebP).');
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    return;
+                }
+
                 const base64 = await FileSystem.readAsStringAsync(asset.uri, {
                     encoding: 'base64',
                 });
@@ -196,8 +238,9 @@ export default function RegistrationScreen() {
         try {
             // Map fixed fields explicitly, everything else goes to additionalData
             const {
-                fullName, enrollment, email, phone,
+                fullName, enrollment, email, phone, distance,
                 department, year, prevMarks, category, gender,
+                studentPhoto,
                 ...rest
             } = formData;
 
@@ -206,11 +249,13 @@ export default function RegistrationScreen() {
                 enrollment: enrollment || '',
                 email: email || '',
                 phone: phone || '',
+                distance: distance || '',
                 department: department || '',
                 year: year || '',
                 prevMarks: prevMarks || '',
                 category: category || '',
                 gender: gender || '',
+                photoUrl: studentPhoto?.base64 || '',
                 additionalData: rest,
                 status: 'pending'
             } as any);
@@ -260,19 +305,35 @@ export default function RegistrationScreen() {
         }
 
         if (field.type === 'date') {
+            const handlePress = () => {
+                if (Platform.OS === 'android') {
+                    DateTimePickerAndroid.open({
+                        value: value ? new Date(value) : new Date(),
+                        onChange: (event, date) => {
+                            if (event.type === 'set' && date) {
+                                updateValue(date.toLocaleDateString());
+                            }
+                        },
+                        mode: 'date',
+                    });
+                } else {
+                    setShowDatePicker(field.id);
+                }
+            };
+
             return (
                 <View key={field.id} style={styles.inputGroup}>
                     {label}
                     <TouchableOpacity
                         style={[styles.inputContainer, value ? styles.inputActive : null]}
-                        onPress={() => setShowDatePicker(field.id)}
+                        onPress={handlePress}
                     >
                         <Text style={[styles.inputText, !value && { color: Colors.textLight }]}>
                             {value || `Choose date`}
                         </Text>
                         <Calendar size={18} color={value ? Colors.primary : Colors.textLight} />
                     </TouchableOpacity>
-                    {showDatePicker === field.id && (
+                    {Platform.OS === 'ios' && showDatePicker === field.id && (
                         <DateTimePicker
                             value={value ? new Date(value) : new Date()}
                             mode="date"
@@ -286,21 +347,36 @@ export default function RegistrationScreen() {
             );
         }
 
-        if (field.type === 'file') {
+        if (field.type === 'file' || field.type === 'image') {
+            const isImage = field.type === 'image';
+            const fileData = value as any;
             return (
                 <View key={field.id} style={styles.inputGroup}>
                     {label}
                     <TouchableOpacity
                         style={[styles.inputContainer, value ? styles.inputActive : null]}
-                        onPress={() => handleFilePick(field.id)}
+                        onPress={() => handleFilePick(field.id, field.type)}
                     >
                         <View style={{ flex: 1 }}>
+                            {value && isImage && (fileData.base64 || fileData.uri) && (
+                                <Image
+                                    source={{ uri: fileData.base64 || fileData.uri }}
+                                    style={{ width: 60, height: 60, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' }}
+                                />
+                            )}
                             <Text style={[styles.inputText, !value && { color: Colors.textLight }]}>
-                                {value ? (typeof value === 'object' ? value.name : 'Document Selected') : `Upload ${field.label}`}
+                                {value ? (typeof value === 'object' ? value.name : 'Selected') : `Upload ${field.label}`}
                             </Text>
-                            {value ? <Text style={{ fontSize: 10, color: Colors.success, marginTop: 2 }}>File ready for submission</Text> : null}
+                            {value ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                    <CheckCircle size={12} color={Colors.success} />
+                                    <Text style={{ fontSize: 11, color: Colors.success, fontWeight: '600' }}>Ready (Under 50KB)</Text>
+                                </View>
+                            ) : (
+                                <Text style={{ fontSize: 10, color: Colors.textLight, marginTop: 4 }}>Format: {isImage ? 'Images only' : 'PDF/Image'}, Max: 50KB</Text>
+                            )}
                         </View>
-                        <FileUp size={18} color={value ? Colors.primary : Colors.textLight} />
+                        <FileUp size={20} color={value ? Colors.primary : Colors.textLight} />
                     </TouchableOpacity>
                 </View>
             );
@@ -327,33 +403,54 @@ export default function RegistrationScreen() {
 
     const renderProgressBar = () => {
         if (pages.length <= 1) return null;
+
+        const progressWidth = progressAnim.interpolate({
+            inputRange: [0, pages.length - 1],
+            outputRange: ['0%', '100%'],
+        });
+
         return (
-            <View style={styles.progressContainer}>
-                {pages.map((_, idx) => {
-                    const isActive = currentStep >= idx;
-                    const isPassed = currentStep > idx;
-                    return (
-                        <React.Fragment key={idx}>
-                            <View style={[
-                                styles.progressDot,
-                                isActive && styles.progressDotActive,
-                                isPassed && styles.progressDotPassed
-                            ]}>
-                                {isPassed ? (
-                                    <CheckCircle size={12} color="#FFF" />
-                                ) : (
-                                    <Text style={[styles.progressText, isActive && { color: '#FFF' }]}>{idx + 1}</Text>
-                                )}
-                            </View>
-                            {idx < pages.length - 1 && (
+            <View style={styles.progressOuterContainer}>
+                <View style={styles.progressContainer}>
+                    {/* Background Track */}
+                    <View style={styles.progressTrack}>
+                        <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
+                    </View>
+
+                    {pages.map((page, idx) => {
+                        const isActive = currentStep === idx;
+                        const isPassed = currentStep > idx;
+
+                        return (
+                            <View key={idx} style={styles.stepWrapper}>
                                 <View style={[
-                                    styles.progressLine,
-                                    isActive && styles.progressLineActive
-                                ]} />
-                            )}
-                        </React.Fragment>
-                    );
-                })}
+                                    styles.progressDot,
+                                    isActive && styles.progressDotActive,
+                                    isPassed && styles.progressDotPassed
+                                ]}>
+                                    {isPassed ? (
+                                        <CheckCircle2 size={16} color="#FFF" />
+                                    ) : (
+                                        <Text style={[
+                                            styles.progressText,
+                                            isActive && { color: '#FFF' },
+                                            isPassed && { color: '#FFF' }
+                                        ]}>{idx + 1}</Text>
+                                    )}
+                                </View>
+                                <Text
+                                    numberOfLines={1}
+                                    style={[
+                                        styles.stepLabel,
+                                        isActive && styles.stepLabelActive
+                                    ]}
+                                >
+                                    {page.title.split(' ')[0]}
+                                </Text>
+                            </View>
+                        );
+                    })}
+                </View>
             </View>
         );
     };
@@ -472,13 +569,78 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 24, fontWeight: '900', color: '#FFF' },
     headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: '600' },
 
-    progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 24, paddingHorizontal: 30 },
-    progressDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-    progressDotActive: { backgroundColor: Colors.primary },
-    progressDotPassed: { backgroundColor: '#10B981' },
-    progressText: { fontSize: 12, fontWeight: '800', color: Colors.textSecondary },
-    progressLine: { flex: 1, height: 4, backgroundColor: '#E2E8F0', marginHorizontal: -2, zIndex: 1 },
-    progressLineActive: { backgroundColor: Colors.primary },
+    progressOuterContainer: {
+        paddingTop: 20,
+        paddingBottom: 40,
+        backgroundColor: '#FFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    progressContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 40,
+        position: 'relative',
+    },
+    progressTrack: {
+        position: 'absolute',
+        top: 16, // Center of dot
+        left: 55, // Center of first dot
+        right: 55, // Center of last dot
+        height: 4,
+        backgroundColor: '#F1F5F9',
+        borderRadius: 2,
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: Colors.primary,
+        borderRadius: 2,
+    },
+    stepWrapper: {
+        alignItems: 'center',
+        gap: 8,
+        width: 60,
+    },
+    progressDot: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#FFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2,
+        borderWidth: 2,
+        borderColor: '#E2E8F0',
+    },
+    progressDotActive: {
+        borderColor: Colors.primary,
+        backgroundColor: Colors.primary,
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 6,
+    },
+    progressDotPassed: {
+        backgroundColor: '#10B981',
+        borderColor: '#10B981',
+    },
+    progressText: {
+        fontSize: 12,
+        fontWeight: '900',
+        color: '#94A3B8',
+    },
+    stepLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#94A3B8',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    stepLabelActive: {
+        color: Colors.primary,
+    },
 
     card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 24, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
     pageInfo: { marginBottom: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: 16 },

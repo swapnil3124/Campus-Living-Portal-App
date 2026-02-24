@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import admissionRoutes from './routes/admissionRoutes';
 import configRoutes from './routes/configRoutes';
+import meritRoutes from './routes/meritRoutes';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/admissions', admissionRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/merit', meritRoutes);
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus_portal';

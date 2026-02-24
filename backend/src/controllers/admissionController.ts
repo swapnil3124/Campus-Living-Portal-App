@@ -10,6 +10,16 @@ export const getAllAdmissions = async (req: Request, res: Response) => {
     }
 };
 
+export const getAdmissionById = async (req: Request, res: Response) => {
+    try {
+        const admission = await Admission.findById(req.params.id);
+        if (!admission) return res.status(404).json({ message: 'Admission not found' });
+        res.json(admission);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
 export const createAdmission = async (req: Request, res: Response) => {
     try {
         console.log('Received Admission Data:', JSON.stringify(req.body).substring(0, 200) + '...');

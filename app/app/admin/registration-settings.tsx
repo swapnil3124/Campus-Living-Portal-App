@@ -27,7 +27,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
 export default function RegistrationSettingsScreen() {
     const insets = useSafeAreaInsets();
@@ -38,6 +38,24 @@ export default function RegistrationSettingsScreen() {
     const [endDate, setEndDate] = useState(new Date());
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
+
+    const showDatePicker = (type: 'start' | 'end') => {
+        if (Platform.OS === 'android') {
+            DateTimePickerAndroid.open({
+                value: type === 'start' ? startDate : endDate,
+                onChange: (event, date) => {
+                    if (event.type === 'set' && date) {
+                        if (type === 'start') setStartDate(date);
+                        else setEndDate(date);
+                    }
+                },
+                mode: 'date',
+            });
+        } else {
+            if (type === 'start') setShowStartPicker(true);
+            else setShowEndPicker(true);
+        }
+    };
     const [isOpen, setIsOpen] = useState(true);
     const [pages, setPages] = useState(regConfig.pages || []);
     const [expandedPage, setExpandedPage] = useState<string | null>(null);
@@ -226,28 +244,28 @@ export default function RegistrationSettingsScreen() {
                     <View style={styles.dateGrid}>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.inputLabel}>Start Date</Text>
-                            <TouchableOpacity style={styles.dateBtn} onPress={() => setShowStartPicker(true)}>
+                            <TouchableOpacity style={styles.dateBtn} onPress={() => showDatePicker('start')}>
                                 <Calendar size={18} color={Colors.primary} />
                                 <Text style={styles.dateBtnText}>{startDate.toLocaleDateString()}</Text>
                             </TouchableOpacity>
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.inputLabel}>End Date</Text>
-                            <TouchableOpacity style={styles.dateBtn} onPress={() => setShowEndPicker(true)}>
+                            <TouchableOpacity style={styles.dateBtn} onPress={() => showDatePicker('end')}>
                                 <Calendar size={18} color={Colors.primary} />
                                 <Text style={styles.dateBtnText}>{endDate.toLocaleDateString()}</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    {showStartPicker && (
+                    {Platform.OS === 'ios' && showStartPicker && (
                         <DateTimePicker
                             value={startDate}
                             mode="date"
                             onChange={(e: any, d?: Date) => { setShowStartPicker(false); if (d) setStartDate(d); }}
                         />
                     )}
-                    {showEndPicker && (
+                    {Platform.OS === 'ios' && showEndPicker && (
                         <DateTimePicker
                             value={endDate}
                             mode="date"

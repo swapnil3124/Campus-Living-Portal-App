@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     View,
     Text,
@@ -7,33 +7,142 @@ import {
     TextInput,
     TouchableOpacity,
     Alert,
+    Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send, Calendar } from 'lucide-react-native';
+import { Send, Calendar, MapPin, Navigation } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import * as Location from 'expo-location';
 import Colors from '@/constants/colors';
 import { leaveTypes } from '@/mocks/data';
+import { useLeaveStore } from '@/store/leave-store';
+import { mockStudent } from '@/mocks/data';
 
 export default function NewLeaveScreen() {
     const router = useRouter();
+    const { addLeave, isLoading: isSubmitting } = useLeaveStore();
     const [leaveType, setLeaveType] = useState<string>('');
-    const [fromDate, setFromDate] = useState<string>('');
-    const [toDate, setToDate] = useState<string>('');
+    const [fromDate, setFromDate] = useState<Date>(new Date());
+    const [toDate, setToDate] = useState<Date>(new Date());
+    const [showFromPicker, setShowFromPicker] = useState(false);
+    const [showToPicker, setShowToPicker] = useState(false);
     const [reason, setReason] = useState<string>('');
     const [destination, setDestination] = useState<string>('');
     const [parentContact, setParentContact] = useState<string>('');
+    const [location, setLocation] = useState<Location.LocationObject | null>(null);
+    const [locationAddress, setLocationAddress] = useState<string>('');
+    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
-    const handleSubmit = useCallback(() => {
-        if (!leaveType || !fromDate.trim() || !toDate.trim() || !reason.trim() || !destination.trim() || !parentContact.trim()) {
-            Alert.alert('Error', 'Please fill in all fields');
+    const getLiveLocation = async () => {
+        setIsLoadingLocation(true);
+        try {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Please allow location access to submit leave application.');
+                return;
+            }
+
+            let loc = await Location.getCurrentPositionAsync({});
+            setLocation(loc);
+
+            let reverseGeocode = await Location.reverseGeocodeAsync({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude
+            });
+
+            if (reverseGeocode.length > 0) {
+                const address = reverseGeocode[0];
+                setLocationAddress(`${address.name || ''}, ${address.city || ''}, ${address.region || ''}`);
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Could not fetch live location');
+        } finally {
+            setIsLoadingLocation(false);
+        }
+    };
+
+    const handleSubmit = useCallback(async () => {
+        if (!leaveType || !reason || !destination || !parentContact) {
+            Alert.alert('Error', 'Please fill all details');
             return;
         }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Success', 'Leave application submitted successfully!', [
-            { text: 'OK', onPress: () => router.back() },
-        ]);
-    }, [leaveType, fromDate, toDate, reason, destination, parentContact, router]);
+
+        if (reason.length < 10) {
+            Alert.alert('Error', 'Reason should be at least 10 characters');
+            return;
+        }
+
+        if (toDate <= fromDate) {
+            Alert.alert('Error', 'Return date must be after departure date');
+            return;
+        }
+
+        if (!location) {
+            Alert.alert('Error', 'Please capture your live location');
+            return;
+        }
+
+        try {
+            await addLeave({
+                studentId: mockStudent.id,
+                studentName: mockStudent.name,
+                studentYear: mockStudent.year,
+                hostelName: mockStudent.hostelName,
+                roomNo: mockStudent.roomNo,
+                leaveType,
+                fromDate: formatDate(fromDate),
+                toDate: formatDate(toDate),
+                reason,
+                destination,
+                parentContact,
+            });
+
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert(
+                'Success',
+                'Leave application submitted successfully!',
+                [{ text: 'OK', onPress: () => router.back() }]
+            );
+        } catch (error) {
+            Alert.alert('Error', 'Failed to submit application');
+        }
+    }, [leaveType, fromDate, toDate, reason, destination, parentContact, location, addLeave, router]);
+
+    const formatDate = (date: Date) => {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const showPicker = (type: 'from' | 'to') => {
+        const initialDate = type === 'from' ? fromDate : toDate;
+
+        if (Platform.OS === 'android') {
+            DateTimePickerAndroid.open({
+                value: initialDate,
+                onChange: (event, date) => {
+                    if (event.type === 'set' && date) {
+                        // After date is set, open time picker
+                        DateTimePickerAndroid.open({
+                            value: date,
+                            onChange: (e, time) => {
+                                if (e.type === 'set' && time) {
+                                    if (type === 'from') setFromDate(time);
+                                    else setToDate(time);
+                                }
+                            },
+                            mode: 'time',
+                            is24Hour: false,
+                        });
+                    }
+                },
+                mode: 'date',
+            });
+        } else {
+            if (type === 'from') setShowFromPicker(true);
+            else setShowToPicker(true);
+        }
+    };
 
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -54,38 +163,55 @@ export default function NewLeaveScreen() {
 
             <View style={styles.dateRow}>
                 <View style={styles.dateField}>
-                    <Text style={styles.label}>From Date</Text>
-                    <View style={styles.inputWrap}>
+                    <Text style={styles.label}>From Date & Time</Text>
+                    <TouchableOpacity style={styles.inputWrap} onPress={() => showPicker('from')}>
                         <Calendar size={16} color={Colors.textLight} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={Colors.textLight}
+                        <Text style={[styles.input, !fromDate && { color: Colors.textLight }]}>
+                            {formatDate(fromDate)}
+                        </Text>
+                    </TouchableOpacity>
+                    {Platform.OS === 'ios' && showFromPicker && (
+                        <DateTimePicker
                             value={fromDate}
-                            onChangeText={setFromDate}
+                            mode="datetime"
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                                setShowFromPicker(false);
+                                if (selectedDate) setFromDate(selectedDate);
+                            }}
                         />
-                    </View>
+                    )}
                 </View>
+            </View>
+
+            <View style={styles.dateRow}>
                 <View style={styles.dateField}>
-                    <Text style={styles.label}>To Date</Text>
-                    <View style={styles.inputWrap}>
+                    <Text style={styles.label}>To Date & Time</Text>
+                    <TouchableOpacity style={styles.inputWrap} onPress={() => showPicker('to')}>
                         <Calendar size={16} color={Colors.textLight} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={Colors.textLight}
+                        <Text style={[styles.input, !toDate && { color: Colors.textLight }]}>
+                            {formatDate(toDate)}
+                        </Text>
+                    </TouchableOpacity>
+                    {Platform.OS === 'ios' && showToPicker && (
+                        <DateTimePicker
                             value={toDate}
-                            onChangeText={setToDate}
+                            mode="datetime"
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                                setShowToPicker(false);
+                                if (selectedDate) setToDate(selectedDate);
+                            }}
                         />
-                    </View>
+                    )}
                 </View>
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.label}>Reason</Text>
+                <Text style={styles.label}>Reason for Leave</Text>
                 <TextInput
                     style={styles.textArea}
-                    placeholder="Reason for leave..."
+                    placeholder="e.g., Going home for Ganpati Festival (Min 10 characters)"
                     placeholderTextColor={Colors.textLight}
                     multiline
                     numberOfLines={4}
@@ -96,8 +222,9 @@ export default function NewLeaveScreen() {
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.label}>Destination</Text>
+                <Text style={styles.label}>Destination Address</Text>
                 <View style={styles.inputWrap}>
+                    <MapPin size={16} color={Colors.textLight} />
                     <TextInput
                         style={styles.input}
                         placeholder="Where are you going?"
@@ -109,17 +236,44 @@ export default function NewLeaveScreen() {
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.label}>Parent Contact Number</Text>
+                <Text style={styles.label}>Parent Contact No</Text>
                 <View style={styles.inputWrap}>
                     <TextInput
                         style={styles.input}
-                        placeholder="Parent's mobile number"
+                        placeholder="For verification purposes"
                         placeholderTextColor={Colors.textLight}
                         keyboardType="phone-pad"
                         value={parentContact}
                         onChangeText={setParentContact}
                     />
                 </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.label}>Student Live Location</Text>
+                {!location ? (
+                    <TouchableOpacity
+                        style={styles.locationBtn}
+                        onPress={getLiveLocation}
+                        disabled={isLoadingLocation}
+                    >
+                        <Navigation size={18} color={Colors.primary} />
+                        <Text style={styles.locationBtnText}>
+                            {isLoadingLocation ? 'Fetching Location...' : 'Capture Live Location'}
+                        </Text>
+                    </TouchableOpacity>
+                ) : (
+                    <View style={styles.locationCaptured}>
+                        <Navigation size={18} color={Colors.success} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.locationText}>Location Captured</Text>
+                            <Text style={styles.addressText}>{locationAddress || 'Address fetched successfully'}</Text>
+                        </View>
+                        <TouchableOpacity onPress={getLiveLocation}>
+                            <Text style={styles.retryText}>Retry</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.85}>
@@ -239,5 +393,47 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600' as const,
         color: Colors.white,
+    },
+    locationBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 12,
+        backgroundColor: Colors.primaryGhost,
+        gap: 12,
+        borderWidth: 1.5,
+        borderColor: Colors.primary + '30',
+        borderStyle: 'dashed',
+    },
+    locationBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: Colors.primary,
+    },
+    locationCaptured: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 12,
+        backgroundColor: Colors.successLight,
+        gap: 12,
+        borderWidth: 1.5,
+        borderColor: Colors.success + '30',
+    },
+    locationText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.success,
+    },
+    addressText: {
+        fontSize: 12,
+        color: Colors.textSecondary,
+        marginTop: 2,
+    },
+    retryText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.primary,
+        padding: 8,
     },
 });

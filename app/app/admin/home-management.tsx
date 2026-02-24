@@ -131,6 +131,28 @@ export default function HomeManagementScreen() {
                         </View>
                         <ChevronRight size={20} color={Colors.textLight} />
                     </TouchableOpacity>
+
+                    <View style={styles.divider} />
+
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.moduleBtn}
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push('/admin/leave-management' as any);
+                        }}
+                    >
+                        <View style={styles.settingInfo}>
+                            <View style={[styles.iconWrap, { backgroundColor: '#FFF9C4' }]}>
+                                <FileText size={20} color="#FBC02D" />
+                            </View>
+                            <View>
+                                <Text style={styles.settingLabel}>Leave Management</Text>
+                                <Text style={styles.settingDesc}>Review and approve student leaves</Text>
+                            </View>
+                        </View>
+                        <ChevronRight size={20} color={Colors.textLight} />
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.headerSection}>

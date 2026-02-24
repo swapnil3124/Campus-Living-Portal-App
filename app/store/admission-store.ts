@@ -36,7 +36,7 @@ interface AdmissionStore {
             fields: Array<{
                 id: string;
                 label: string;
-                type: 'text' | 'number' | 'date' | 'dropdown' | 'email' | 'phone' | 'file';
+                type: 'text' | 'number' | 'date' | 'dropdown' | 'email' | 'phone' | 'file' | 'image';
                 required: boolean;
                 options?: string[];
             }>;
@@ -48,8 +48,20 @@ interface AdmissionStore {
     addAdmission: (admission: any) => Promise<boolean>;
     updateAdmission: (id: string, updates: Partial<Admission>) => Promise<boolean>;
     deleteAdmission: (id: string) => Promise<boolean>;
+    getAdmissionById: (id: string) => Promise<Admission | null>;
     fetchRegConfig: () => Promise<void>;
     updateRegConfig: (updates: any) => Promise<boolean>;
+    meritListSettings: {
+        departmentSeats: Record<string, number>;
+        categoryPercentages: Record<string, number>;
+    };
+    fetchMeritListSettings: () => Promise<void>;
+    updateMeritListSettings: (settings: any) => Promise<boolean>;
+    generateMeritList: () => Promise<{ success: boolean; message: string }>;
+    meritLists: any[];
+    fetchMeritLists: () => Promise<void>;
+    publishMeritList: (id: string) => Promise<boolean>;
+    deleteMeritList: (id: string) => Promise<boolean>;
 }
 
 export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
@@ -65,13 +77,20 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
                 description: 'Please provide your basic contact information.',
                 fields: [
                     { id: 'fullName', label: 'Full Name', type: 'text', required: true },
-                    { id: 'enrollment', label: 'Enrollment No', type: 'text', required: true },
+                    { id: 'enrollment', label: 'Enrollment No', type: 'number', required: true },
                     { id: 'email', label: 'Email ID', type: 'email', required: true },
                     { id: 'phone', label: 'Student Mobile No', type: 'phone', required: true },
+                    { id: 'distance', label: 'Distance (KM)', type: 'number', required: true },
+                    { id: 'studentPhoto', label: 'Student Photo', type: 'image', required: true },
                 ]
             }
         ]
     },
+    meritListSettings: {
+        departmentSeats: {},
+        categoryPercentages: {}
+    },
+    meritLists: [],
     isLoading: false,
     error: null,
 
@@ -105,9 +124,11 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
                     description: 'Please provide your basic contact information.',
                     fields: [
                         { id: 'fullName', label: 'Full Name', type: 'text', required: true },
-                        { id: 'enrollment', label: 'Enrollment No', type: 'text', required: true },
+                        { id: 'enrollment', label: 'Enrollment No', type: 'number', required: true },
                         { id: 'email', label: 'Email ID', type: 'email', required: true },
                         { id: 'phone', label: 'Student Mobile No', type: 'phone', required: true },
+                        { id: 'distance', label: 'Distance (KM)', type: 'number', required: true },
+                        { id: 'studentPhoto', label: 'Student Photo', type: 'image', required: true },
                     ]
                 };
 
@@ -179,9 +200,11 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
                 description: 'Please provide your basic contact information.',
                 fields: [
                     { id: 'fullName', label: 'Full Name', type: 'text', required: true },
-                    { id: 'enrollment', label: 'Enrollment No', type: 'text', required: true },
+                    { id: 'enrollment', label: 'Enrollment No', type: 'number', required: true },
                     { id: 'email', label: 'Email ID', type: 'email', required: true },
                     { id: 'phone', label: 'Student Mobile No', type: 'phone', required: true },
+                    { id: 'distance', label: 'Distance (KM)', type: 'number', required: true },
+                    { id: 'studentPhoto', label: 'Student Photo', type: 'image', required: true },
                 ]
             };
 
@@ -330,6 +353,121 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         } catch (err: any) {
             console.error('deleteAdmission Error:', err);
             set({ error: err.message, isLoading: false });
+            return false;
+        }
+    },
+
+    getAdmissionById: async (id) => {
+        try {
+            const response = await fetch(`${API_URL}/admissions/${id}`);
+            if (!response.ok) throw new Error('Failed to fetch admission');
+            const data = await response.json();
+            return { ...data, id: data._id };
+        } catch (err) {
+            console.error('getAdmissionById Error:', err);
+            return null;
+        }
+    },
+
+    fetchMeritListSettings: async () => {
+        try {
+            const response = await fetch(`${API_URL}/config/merit_list`);
+            if (response.ok) {
+                const data = await response.json();
+                set({ meritListSettings: data.value });
+            }
+        } catch (err) {
+            console.error('fetchMeritListSettings Error:', err);
+        }
+    },
+
+    updateMeritListSettings: async (settings) => {
+        set({ isLoading: true });
+        try {
+            const response = await fetch(`${API_URL}/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: 'merit_list', value: settings }),
+            });
+            if (response.ok) {
+                set({ meritListSettings: settings, isLoading: false });
+                return true;
+            }
+            throw new Error('Failed to update merit list settings');
+        } catch (err: any) {
+            console.error('updateMeritListSettings Error:', err);
+            set({ error: err.message, isLoading: false });
+            return false;
+        }
+    },
+
+    fetchMeritLists: async () => {
+        try {
+            const response = await fetch(`${API_URL}/merit`);
+            if (response.ok) {
+                const data = await response.json();
+                set({ meritLists: data });
+            }
+        } catch (err) {
+            console.error('fetchMeritLists Error:', err);
+        }
+    },
+
+    generateMeritList: async () => {
+        set({ isLoading: true });
+        try {
+            const response = await fetch(`${API_URL}/merit/generate`, {
+                method: 'POST',
+            });
+            const data = await response.json();
+            if (response.ok) {
+                // Also update the local meritLists state with the newly generated lists
+                set({ meritLists: data.lists, isLoading: false });
+                return { success: true, message: data.message };
+            }
+            throw new Error(data.message || 'Failed to generate merit list');
+        } catch (err: any) {
+            console.error('generateMeritList Error:', err);
+            set({ isLoading: false });
+            return { success: false, message: err.message };
+        }
+    },
+
+    publishMeritList: async (id: string) => {
+        set({ isLoading: true });
+        try {
+            const response = await fetch(`${API_URL}/merit/${id}/publish`, {
+                method: 'POST',
+            });
+            if (response.ok) {
+                set({ isLoading: false });
+                return true;
+            }
+            throw new Error('Failed to publish merit list');
+        } catch (err) {
+            console.error('publishMeritList Error:', err);
+            set({ isLoading: false });
+            return false;
+        }
+    },
+
+    deleteMeritList: async (id: string) => {
+        set({ isLoading: true });
+        try {
+            const response = await fetch(`${API_URL}/merit/${id}`, {
+                method: 'DELETE',
+            });
+            if (response.ok) {
+                set((state) => ({
+                    meritLists: state.meritLists.filter(l => l._id !== id),
+                    isLoading: false
+                }));
+                return true;
+            }
+            throw new Error('Failed to delete merit list');
+        } catch (err) {
+            console.error('deleteMeritList Error:', err);
+            set({ isLoading: false });
             return false;
         }
     },

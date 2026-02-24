@@ -30,16 +30,18 @@ import {
     Zap,
     Key,
     User2,
+    UtensilsCrossed,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { Student, UserRole } from '@/constants/types';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { boysHostelNames, girlsHostelNames } from '@/mocks/data';
 
 function LoginScreen() {
     const { login, isLoginLoading } = useAuth();
-    const [loginType, setLoginType] = useState<'student' | 'admin' | null>(null);
+    const [loginType, setLoginType] = useState<UserRole>(null);
     const [enrollment, setEnrollment] = useState<string>('');
     const [phone, setPhone] = useState<string>('');
     const [username, setUsername] = useState<string>('');
@@ -47,14 +49,14 @@ function LoginScreen() {
     const [selectedHostel, setSelectedHostel] = useState<string>('');
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const slideAnim = useRef(new Animated.Value(20)).current;
+    const slideAnim = useRef(new Animated.Value(30)).current;
 
     useEffect(() => {
         Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-            Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+            Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+            Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true }),
         ]).start();
-    }, []);
+    }, [loginType]);
 
     const handleStudentLogin = useCallback(() => {
         if (!enrollment.trim() || !phone.trim()) {
@@ -65,14 +67,24 @@ function LoginScreen() {
         login('student');
     }, [enrollment, phone, login]);
 
-    const handleAdminLogin = useCallback(() => {
-        if (!selectedHostel || !username.trim() || !password.trim()) {
-            Alert.alert('Error', 'Please fill in all fields');
-            return;
+    const handleStaffLogin = useCallback(() => {
+        if (!loginType) return;
+        if (loginType === 'admin') {
+            if (!selectedHostel || !username.trim() || !password.trim()) {
+                Alert.alert('Error', 'Please fill in all fields');
+                return;
+            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            login('admin', selectedHostel);
+        } else {
+            if (!username.trim() || !password.trim()) {
+                Alert.alert('Error', 'Please fill in all fields');
+                return;
+            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            login(loginType);
         }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        login('admin', selectedHostel);
-    }, [selectedHostel, username, password, login]);
+    }, [loginType, selectedHostel, username, password, login]);
 
     const allHostels = [...boysHostelNames.map(h => ({ name: h, type: 'Boys' })), ...girlsHostelNames.map(h => ({ name: h, type: 'Girls' }))];
 
@@ -80,189 +92,218 @@ function LoginScreen() {
         <View style={styles.container}>
             <LinearGradient
                 colors={[Colors.primaryDark, Colors.primary]}
-                style={[styles.loginHeader, { paddingTop: insets.top + 12 }]}
+                style={[styles.loginHeader, { paddingTop: insets.top + 30 }]}
             >
                 <Animated.View style={[styles.loginHeaderContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-                    <View style={styles.loginIcon}>
-                        <Lock size={28} color={Colors.white} />
+                    <View style={styles.logoContainer}>
+                        <Image
+                            source={require('@/assets/images/logo.png')}
+                            style={styles.logoImage}
+                            contentFit="contain"
+                        />
                     </View>
-                    <Text style={styles.loginHeaderTitle}>
-                        {loginType ? (loginType === 'student' ? 'Student Login' : 'Admin Login') : 'Login'}
+                    <Text style={styles.loginHeaderTitleText}>Campus Living Portal</Text>
+                    <Text style={styles.loginHeaderSub}>
+                        {loginType ? (loginType === 'student' ? 'Student Portal Access' : 'Staff Administration Access') : 'Welcome to our Campus Community'}
                     </Text>
-                    <Text style={styles.loginHeaderSub}>Access your hostel account</Text>
                 </Animated.View>
             </LinearGradient>
 
             <ScrollView contentContainerStyle={styles.loginContent} showsVerticalScrollIndicator={false}>
                 {!loginType ? (
                     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-                        <Text style={styles.selectLabel}>Select Login Type</Text>
+                        <Text style={styles.selectLabel}>Choose Your Role</Text>
+
                         <TouchableOpacity
-                            style={styles.roleCard}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setLoginType('student'); }}
-                            activeOpacity={0.85}
+                            style={styles.heroRoleCard}
+                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); setLoginType('student'); }}
+                            activeOpacity={0.9}
                         >
-                            <LinearGradient colors={['#E3F2FD', '#BBDEFB']} style={styles.roleGradient}>
-                                <View style={styles.roleIconWrap}>
-                                    <User size={28} color="#1565C0" />
+                            <LinearGradient colors={['#ECFDF5', '#D1FAE5']} style={styles.heroRoleGradient}>
+                                <View style={styles.heroRoleIconWrap}>
+                                    <User size={32} color="#059669" />
                                 </View>
                                 <View style={styles.roleText}>
-                                    <Text style={styles.roleTitle}>Student</Text>
-                                    <Text style={styles.roleDesc}>Login with enrollment number & OTP</Text>
+                                    <Text style={[styles.roleTitle, { color: '#065F46' }]}>Student Access</Text>
+                                    <Text style={styles.roleDesc}>Login to manage your room, leave, and mess details</Text>
                                 </View>
-                                <ChevronRight size={20} color="#1565C0" />
+                                <View style={styles.goBtn}>
+                                    <ChevronRight size={20} color="#059669" />
+                                </View>
                             </LinearGradient>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.roleCard}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setLoginType('admin'); }}
-                            activeOpacity={0.85}
-                        >
-                            <LinearGradient colors={[Colors.primaryGhost, Colors.primaryLight]} style={styles.roleGradient}>
-                                <View style={[styles.roleIconWrap, { backgroundColor: 'rgba(0,137,123,0.15)' }]}>
-                                    <ShieldCheck size={28} color={Colors.primaryDark} />
+                        <Text style={[styles.selectLabel, { marginTop: 20 }]}>Staff & Administration</Text>
+
+                        <View style={styles.staffGrid}>
+                            <TouchableOpacity
+                                style={styles.staffCard}
+                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setLoginType('admin'); }}
+                                activeOpacity={0.85}
+                            >
+                                <View style={[styles.staffIconWrap, { backgroundColor: '#F0F9FF' }]}>
+                                    <ShieldCheck size={24} color="#0284C7" />
                                 </View>
-                                <View style={styles.roleText}>
-                                    <Text style={[styles.roleTitle, { color: Colors.primaryDark }]}>Admin</Text>
-                                    <Text style={styles.roleDesc}>Login with hostel credentials</Text>
+                                <Text style={styles.staffTitle}>Warden</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.staffCard}
+                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setLoginType('rector'); }}
+                                activeOpacity={0.85}
+                            >
+                                <View style={[styles.staffIconWrap, { backgroundColor: '#F5F3FF' }]}>
+                                    <UserCircle size={24} color="#7C3AED" />
                                 </View>
-                                <ChevronRight size={20} color={Colors.primaryDark} />
-                            </LinearGradient>
-                        </TouchableOpacity>
+                                <Text style={styles.staffTitle}>Rector</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.staffCard}
+                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setLoginType('contractor'); }}
+                                activeOpacity={0.85}
+                            >
+                                <View style={[styles.staffIconWrap, { backgroundColor: '#FEF2F2' }]}>
+                                    <UtensilsCrossed size={24} color="#DC2626" />
+                                </View>
+                                <Text style={styles.staffTitle}>Contractor</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.staffCard}
+                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setLoginType('watchman'); }}
+                                activeOpacity={0.85}
+                            >
+                                <View style={[styles.staffIconWrap, { backgroundColor: '#FFF7ED' }]}>
+                                    <Building2 size={24} color="#EA580C" />
+                                </View>
+                                <Text style={styles.staffTitle}>Watchman</Text>
+                            </TouchableOpacity>
+                        </View>
                     </Animated.View>
-                ) : loginType === 'student' ? (
-                    <View>
-                        <TouchableOpacity style={styles.backBtn} onPress={() => setLoginType(null)}>
-                            <Text style={styles.backBtnText}>← Back to role selection</Text>
-                        </TouchableOpacity>
-                        <View style={styles.formCard}>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Enrollment Number</Text>
-                                <View style={styles.inputWrap}>
-                                    <User size={18} color={Colors.textLight} />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Enter enrollment number"
-                                        placeholderTextColor={Colors.textLight}
-                                        value={enrollment}
-                                        onChangeText={setEnrollment}
-                                        testID="enrollment-input"
-                                    />
-                                </View>
-                            </View>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Mobile Number</Text>
-                                <View style={styles.inputWrap}>
-                                    <Smartphone size={18} color={Colors.textLight} />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Enter mobile number"
-                                        placeholderTextColor={Colors.textLight}
-                                        keyboardType="phone-pad"
-                                        value={phone}
-                                        onChangeText={setPhone}
-                                        testID="phone-input"
-                                    />
-                                </View>
-                            </View>
-                            <TouchableOpacity
-                                style={styles.loginBtn}
-                                onPress={handleStudentLogin}
-                                disabled={isLoginLoading}
-                                activeOpacity={0.85}
-                            >
-                                <LinearGradient
-                                    colors={[Colors.primary, Colors.primaryDark]}
-                                    style={styles.loginBtnGradient}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                >
-                                    {isLoginLoading ? (
-                                        <ActivityIndicator color={Colors.white} />
-                                    ) : (
-                                        <Text style={styles.loginBtnText}>Send OTP & Login</Text>
-                                    )}
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
                 ) : (
-                    <View>
-                        <TouchableOpacity style={styles.backBtn} onPress={() => setLoginType(null)}>
-                            <Text style={styles.backBtnText}>← Back to role selection</Text>
+                    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+                        <TouchableOpacity style={styles.backButtonContainer} onPress={() => setLoginType(null)}>
+                            <ChevronRight size={18} color={Colors.primary} style={{ transform: [{ rotate: '180deg' }] }} />
+                            <Text style={styles.backButtonText}>Return to selection</Text>
                         </TouchableOpacity>
-                        <View style={styles.formCard}>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Select Hostel</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hostelPicker}>
-                                    {allHostels.map((h) => (
-                                        <TouchableOpacity
-                                            key={h.name}
-                                            style={[styles.hostelChip, selectedHostel === h.name && styles.hostelChipActive]}
-                                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedHostel(h.name); }}
-                                        >
-                                            <Building2 size={14} color={selectedHostel === h.name ? Colors.white : Colors.textSecondary} />
-                                            <Text style={[styles.hostelChipText, selectedHostel === h.name && styles.hostelChipTextActive]}>
-                                                {h.name}
-                                            </Text>
-                                            <Text style={[styles.hostelChipType, selectedHostel === h.name && { color: 'rgba(255,255,255,0.7)' }]}>
-                                                {h.type}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
+
+                        <View style={styles.loginFormContainer}>
+                            <View style={styles.formHeader}>
+                                <Text style={styles.formTitle}>
+                                    {loginType === 'student' ? 'Student Login' : `${loginType.charAt(0).toUpperCase() + loginType.slice(1)} Login`}
+                                </Text>
+                                <View style={styles.formTitleUnderline} />
                             </View>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Username</Text>
-                                <View style={styles.inputWrap}>
-                                    <User size={18} color={Colors.textLight} />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Enter username"
-                                        placeholderTextColor={Colors.textLight}
-                                        value={username}
-                                        onChangeText={setUsername}
-                                        testID="username-input"
-                                    />
+
+                            {loginType === 'admin' && (
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Select Assigned Hostel</Text>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hostelPicker}>
+                                        {allHostels.map((h) => (
+                                            <TouchableOpacity
+                                                key={h.name}
+                                                style={[styles.hostelChip, selectedHostel === h.name && styles.hostelChipActive]}
+                                                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedHostel(h.name); }}
+                                            >
+                                                <Building2 size={14} color={selectedHostel === h.name ? Colors.white : Colors.textSecondary} />
+                                                <Text style={[styles.hostelChipText, selectedHostel === h.name && styles.hostelChipTextActive]}>
+                                                    {h.name}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
                                 </View>
-                            </View>
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Password</Text>
-                                <View style={styles.inputWrap}>
-                                    <Lock size={18} color={Colors.textLight} />
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Enter password"
-                                        placeholderTextColor={Colors.textLight}
-                                        secureTextEntry
-                                        value={password}
-                                        onChangeText={setPassword}
-                                        testID="password-input"
-                                    />
-                                </View>
-                            </View>
+                            )}
+
+                            {loginType === 'student' ? (
+                                <>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Enrollment ID</Text>
+                                        <View style={styles.inputWrap}>
+                                            <User size={18} color={Colors.primary} />
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Enter your enrollment no."
+                                                placeholderTextColor={Colors.textLight}
+                                                value={enrollment}
+                                                onChangeText={setEnrollment}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Registered Mobile</Text>
+                                        <View style={styles.inputWrap}>
+                                            <Smartphone size={18} color={Colors.primary} />
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Enter registered number"
+                                                placeholderTextColor={Colors.textLight}
+                                                keyboardType="phone-pad"
+                                                value={phone}
+                                                onChangeText={setPhone}
+                                            />
+                                        </View>
+                                    </View>
+                                </>
+                            ) : (
+                                <>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Staff Username</Text>
+                                        <View style={styles.inputWrap}>
+                                            <Mail size={18} color={Colors.primary} />
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Enter username"
+                                                placeholderTextColor={Colors.textLight}
+                                                value={username}
+                                                onChangeText={setUsername}
+                                            />
+                                        </View>
+                                    </View>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Security Password</Text>
+                                        <View style={styles.inputWrap}>
+                                            <Lock size={18} color={Colors.primary} />
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Enter password"
+                                                placeholderTextColor={Colors.textLight}
+                                                secureTextEntry
+                                                value={password}
+                                                onChangeText={setPassword}
+                                            />
+                                        </View>
+                                    </View>
+                                </>
+                            )}
+
                             <TouchableOpacity
-                                style={styles.loginBtn}
-                                onPress={handleAdminLogin}
+                                style={styles.primeButton}
+                                onPress={loginType === 'student' ? handleStudentLogin : handleStaffLogin}
                                 disabled={isLoginLoading}
-                                activeOpacity={0.85}
+                                activeOpacity={0.8}
                             >
                                 <LinearGradient
                                     colors={[Colors.primary, Colors.primaryDark]}
-                                    style={styles.loginBtnGradient}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
+                                    style={styles.primeButtonGradient}
                                 >
                                     {isLoginLoading ? (
                                         <ActivityIndicator color={Colors.white} />
                                     ) : (
-                                        <Text style={styles.loginBtnText}>Login as Admin</Text>
+                                        <>
+                                            <Text style={styles.primeButtonText}>Sign In to Account</Text>
+                                            <Zap size={18} color={Colors.white} />
+                                        </>
                                     )}
                                 </LinearGradient>
                             </TouchableOpacity>
+
+                            <Text style={styles.footerNote}>
+                                Having trouble signing in? <Text style={{ color: Colors.primary, fontWeight: '700' }}>Contact Admin</Text>
+                            </Text>
                         </View>
-                    </View>
+                    </Animated.View>
                 )}
             </ScrollView>
         </View>
@@ -325,11 +366,11 @@ function ProfileScreen() {
                         )}
                         <View style={styles.statusBadge}>
                             <View style={styles.statusDotInner} />
-                            <Text style={styles.statusText}>{role === 'student' ? 'Student' : 'Admin'}</Text>
+                            <Text style={styles.statusText}>{role === 'student' ? 'Student' : 'Warden'}</Text>
                         </View>
                     </View>
                     <Text style={styles.profileHeaderName}>
-                        {role === 'student' ? student?.name : 'Administrator'}
+                        {role === 'student' ? student?.name : 'Hostel Warden'}
                     </Text>
                     <Text style={styles.profileHeaderSub}>
                         {role === 'student' ? student?.enrollmentNo : 'Govt. Poly. Awasari'}
@@ -426,137 +467,207 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     loginHeader: {
-        paddingHorizontal: 20,
-        paddingBottom: 28,
+        paddingHorizontal: 24,
+        paddingBottom: 40,
+        borderBottomLeftRadius: 40,
+        borderBottomRightRadius: 40,
     },
     loginHeaderContent: {
         alignItems: 'center',
     },
-    loginIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+    logoContainer: {
+        width: 80,
+        height: 80,
         backgroundColor: 'rgba(255,255,255,0.15)',
+        borderRadius: 24,
+        padding: 12,
+        marginBottom: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
-    loginHeaderTitle: {
-        fontSize: 22,
-        fontWeight: '700' as const,
+    logoImage: {
+        width: '100%',
+        height: '100%',
+    },
+    loginHeaderTitleText: {
+        fontSize: 26,
+        fontWeight: '800' as const,
         color: Colors.white,
+        letterSpacing: 0.5,
     },
     loginHeaderSub: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.7)',
-        marginTop: 4,
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 6,
+        textAlign: 'center',
     },
     loginContent: {
-        padding: 20,
+        padding: 24,
     },
     selectLabel: {
-        fontSize: 16,
-        fontWeight: '600' as const,
-        color: Colors.text,
+        fontSize: 15,
+        fontWeight: '700' as const,
+        color: Colors.textSecondary,
         marginBottom: 16,
+        textTransform: 'uppercase' as const,
+        letterSpacing: 1,
     },
-    roleCard: {
-        borderRadius: 16,
+    heroRoleCard: {
+        borderRadius: 24,
         overflow: 'hidden',
-        marginBottom: 14,
         shadowColor: Colors.black,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 6,
     },
-    roleGradient: {
+    heroRoleGradient: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 18,
-        borderRadius: 16,
+        padding: 24,
     },
-    roleIconWrap: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: 'rgba(21,101,192,0.12)',
+    heroRoleIconWrap: {
+        width: 64,
+        height: 64,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.5)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginRight: 14,
+        marginRight: 16,
     },
     roleText: {
         flex: 1,
     },
     roleTitle: {
-        fontSize: 17,
-        fontWeight: '700' as const,
-        color: '#1565C0',
+        fontSize: 20,
+        fontWeight: '800' as const,
     },
     roleDesc: {
-        fontSize: 12,
+        fontSize: 13,
         color: Colors.textSecondary,
-        marginTop: 2,
+        marginTop: 4,
+        lineHeight: 18,
     },
-    backBtn: {
-        marginBottom: 16,
+    goBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.6)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    backBtnText: {
-        fontSize: 14,
-        fontWeight: '500' as const,
-        color: Colors.primary,
+    staffGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 16,
     },
-    formCard: {
+    staffCard: {
+        width: '47%',
         backgroundColor: Colors.white,
-        borderRadius: 16,
-        padding: 20,
+        borderRadius: 24,
+        padding: 24,
+        alignItems: 'center',
         shadowColor: Colors.black,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
+        shadowOpacity: 0.05,
         shadowRadius: 8,
         elevation: 2,
     },
+    staffIconWrap: {
+        width: 56,
+        height: 56,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+    },
+    staffTitle: {
+        fontSize: 15,
+        fontWeight: '700' as const,
+        color: Colors.text,
+    },
+    backButtonContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+        gap: 8,
+    },
+    backButtonText: {
+        fontSize: 15,
+        fontWeight: '600' as const,
+        color: Colors.primary,
+    },
+    loginFormContainer: {
+        backgroundColor: Colors.white,
+        borderRadius: 32,
+        padding: 28,
+        shadowColor: Colors.black,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    formHeader: {
+        marginBottom: 24,
+    },
+    formTitle: {
+        fontSize: 22,
+        fontWeight: '800' as const,
+        color: Colors.text,
+    },
+    formTitleUnderline: {
+        width: 40,
+        height: 4,
+        backgroundColor: Colors.primary,
+        borderRadius: 2,
+        marginTop: 8,
+    },
     inputGroup: {
-        marginBottom: 18,
+        marginBottom: 20,
     },
     inputLabel: {
-        fontSize: 13,
-        fontWeight: '600' as const,
-        color: Colors.textSecondary,
-        marginBottom: 8,
+        fontSize: 12,
+        fontWeight: '700' as const,
+        color: Colors.textLight,
+        marginBottom: 10,
         textTransform: 'uppercase' as const,
         letterSpacing: 0.5,
     },
     inputWrap: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+        paddingHorizontal: 16,
         borderWidth: 1.5,
-        borderColor: Colors.border,
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        backgroundColor: Colors.background,
-        gap: 10,
+        borderColor: '#E2E8F0',
+        gap: 12,
     },
     input: {
         flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 16,
         fontSize: 15,
+        fontWeight: '600' as const,
         color: Colors.text,
     },
     hostelPicker: {
+        marginHorizontal: -28,
+        paddingHorizontal: 28,
         marginBottom: 4,
     },
     hostelChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 12,
-        backgroundColor: Colors.background,
+        gap: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 16,
+        backgroundColor: '#F1F5F9',
+        marginRight: 10,
         borderWidth: 1.5,
-        borderColor: Colors.border,
-        marginRight: 8,
+        borderColor: '#F1F5F9',
     },
     hostelChipActive: {
         backgroundColor: Colors.primary,
@@ -564,31 +675,39 @@ const styles = StyleSheet.create({
     },
     hostelChipText: {
         fontSize: 13,
-        fontWeight: '600' as const,
-        color: Colors.text,
+        fontWeight: '700' as const,
+        color: Colors.textSecondary,
     },
     hostelChipTextActive: {
         color: Colors.white,
     },
-    hostelChipType: {
-        fontSize: 10,
-        color: Colors.textLight,
-    },
-    loginBtn: {
-        borderRadius: 14,
+    primeButton: {
+        borderRadius: 18,
+        marginTop: 10,
         overflow: 'hidden',
-        marginTop: 6,
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
     },
-    loginBtnGradient: {
-        paddingVertical: 16,
+    primeButtonGradient: {
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 14,
+        paddingVertical: 18,
+        gap: 10,
     },
-    loginBtnText: {
-        fontSize: 16,
-        fontWeight: '600' as const,
+    primeButtonText: {
+        fontSize: 17,
+        fontWeight: '800' as const,
         color: Colors.white,
+    },
+    footerNote: {
+        fontSize: 13,
+        color: Colors.textLight,
+        textAlign: 'center',
+        marginTop: 24,
     },
     profileHeader: {
         paddingHorizontal: 30,
