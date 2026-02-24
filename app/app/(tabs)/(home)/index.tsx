@@ -37,16 +37,21 @@ const hostelImages: Record<string, any> = {
 
 
 
+import { useAdmissionStore } from '@/store/admission-store';
+
 export default function HomeScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const { regConfig, fetchRegConfig } = useAdmissionStore();
     const fadeAnim = useRef(new Animated.Value(0)).current;
+    // ... animation refs
     const slideAnim = useRef(new Animated.Value(30)).current;
     const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
     const scaleAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(1))).current;
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
+        fetchRegConfig();
         Animated.parallel([
             Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
             Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
@@ -68,6 +73,16 @@ export default function HomeScreen() {
             ])
         ).start();
     }, []);
+
+    const isRegistrationVisible = () => {
+        if (!regConfig.isOpen) return false;
+        if (!regConfig.startDate || !regConfig.endDate) return true; // Default to open if no date set but isOpen is true
+
+        const now = new Date();
+        const start = new Date(regConfig.startDate);
+        const end = new Date(regConfig.endDate);
+        return now >= start && now <= end;
+    };
 
     const boysHostels = hostels.filter(h => h.type === 'boys');
     const girlsHostels = hostels.filter(h => h.type === 'girls');
@@ -284,39 +299,41 @@ export default function HomeScreen() {
                     </Animated.View>
 
                     {/* ── Dynamic "Apply for Hostel" Button ───────────────────── */}
-                    <Animated.View
-                        style={[
-                            styles.section,
-                            {
-                                opacity: cardAnims[0],
-                                transform: [
-                                    { translateY: cardAnims[0].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
-                                ],
-                            },
-                        ]}
-                    >
-                        <TouchableOpacity
-                            activeOpacity={0.85}
-                            onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                router.push('/registration' as any);
-                            }}
-                            style={styles.applyButton}
+                    {isRegistrationVisible() && (
+                        <Animated.View
+                            style={[
+                                styles.section,
+                                {
+                                    opacity: cardAnims[0],
+                                    transform: [
+                                        { translateY: cardAnims[0].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                                    ],
+                                },
+                            ]}
                         >
-                            <View style={styles.applyButtonContent}>
-                                <View style={styles.applyIconWrap}>
-                                    <ClipboardList size={22} color={Colors.white} />
-                                </View>
-                                <View style={styles.applyTextWrap}>
-                                    <Text style={styles.applyButtonText}>Hostel Admission 2025-26</Text>
-                                    <View style={styles.applyBadge}>
-                                        <Text style={styles.applyBadgeText}>APPLICATION OPEN</Text>
+                            <TouchableOpacity
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    router.push('/registration' as any);
+                                }}
+                                style={styles.applyButton}
+                            >
+                                <View style={styles.applyButtonContent}>
+                                    <View style={styles.applyIconWrap}>
+                                        <ClipboardList size={22} color={Colors.white} />
                                     </View>
+                                    <View style={styles.applyTextWrap}>
+                                        <Text style={styles.applyButtonText}>Hostel Admission 2025-26</Text>
+                                        <View style={styles.applyBadge}>
+                                            <Text style={styles.applyBadgeText}>APPLICATION OPEN</Text>
+                                        </View>
+                                    </View>
+                                    <ChevronRight size={20} color={Colors.primary} />
                                 </View>
-                                <ChevronRight size={20} color={Colors.primary} />
-                            </View>
-                        </TouchableOpacity>
-                    </Animated.View>
+                            </TouchableOpacity>
+                        </Animated.View>
+                    )}
 
                     <View style={{ height: 20 }} />
                 </View>

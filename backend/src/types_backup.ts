@@ -61,11 +61,6 @@ export interface Complaint {
 
 export interface LeaveApplication {
     id: string;
-    studentId: string;
-    studentName: string;
-    studentYear: string;
-    hostelName: string;
-    roomNo: string;
     leaveType: string;
     fromDate: string;
     toDate: string;
@@ -74,7 +69,6 @@ export interface LeaveApplication {
     parentContact: string;
     status: 'pending' | 'approved' | 'rejected';
     createdAt: string;
-    rejectionReason?: string;
 }
 
 export interface RoomAsset {
@@ -97,7 +91,7 @@ export interface MessMenu {
     fees: string;
 }
 
-export type UserRole = 'student' | 'admin' | 'rector' | 'contractor' | 'watchman' | null;
+export type UserRole = 'student' | 'admin' | null;
 
 export interface AuthState {
     isLoggedIn: boolean;
@@ -111,15 +105,21 @@ export interface Admission {
     enrollment: string;
     email: string;
     phone: string;
-    department: string;
-    prevMarks: string;
-    distance: string;
-    parentName: string;
+    dob: string;
+    gender: string;
     category: string;
-    gender: 'male' | 'female' | 'other';
-    year: '1st' | '2nd' | '3rd';
-    photoUrl?: string;
-    additionalData: Record<string, any>;
+    instituteName: string;
+    department: string;
+    yearOfStudy: string;
+    prevMarks: string;
+    sscPercentage: string;
+    hostelType: string;
+    distance: string;
+    permanentAddress: string;
+    parentName: string;
+    parentPhone: string;
+    hasMedicalCondition: boolean;
+    medicalDescription: string;
     status: 'pending' | 'verified' | 'accepted' | 'rejected';
     appliedAt: string;
 }

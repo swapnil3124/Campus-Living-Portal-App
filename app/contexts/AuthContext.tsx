@@ -11,12 +11,14 @@ interface StoredAuth {
     isLoggedIn: boolean;
     role: UserRole;
     studentId: string | null;
+    hostelName: string | null;
 }
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
     const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
     const [role, setRole] = useState<UserRole>(null);
     const [student, setStudent] = useState<Student | null>(null);
+    const [hostelName, setHostelName] = useState<string | null>(null);
     const queryClient = useQueryClient();
 
     const authQuery = useQuery({
@@ -34,6 +36,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         if (authQuery.data) {
             setIsLoggedIn(authQuery.data.isLoggedIn);
             setRole(authQuery.data.role);
+            setHostelName(authQuery.data.hostelName);
             if (authQuery.data.isLoggedIn && authQuery.data.role === 'student') {
                 setStudent(mockStudent);
             }
@@ -41,11 +44,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     }, [authQuery.data]);
 
     const loginMutation = useMutation({
-        mutationFn: async ({ loginRole }: { loginRole: UserRole }) => {
+        mutationFn: async ({ loginRole, hostel }: { loginRole: UserRole, hostel?: string }) => {
             const authData: StoredAuth = {
                 isLoggedIn: true,
                 role: loginRole,
                 studentId: loginRole === 'student' ? mockStudent.id : null,
+                hostelName: hostel || null,
             };
             await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(authData));
             return authData;
@@ -53,6 +57,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         onSuccess: (data) => {
             setIsLoggedIn(true);
             setRole(data.role);
+            setHostelName(data.hostelName);
             if (data.role === 'student') {
                 setStudent(mockStudent);
             }
@@ -68,12 +73,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             setIsLoggedIn(false);
             setRole(null);
             setStudent(null);
+            setHostelName(null);
             queryClient.invalidateQueries({ queryKey: ['auth'] });
         },
     });
 
-    const login = useCallback((loginRole: UserRole) => {
-        loginMutation.mutate({ loginRole });
+    const login = useCallback((loginRole: UserRole, hostel?: string) => {
+        loginMutation.mutate({ loginRole, hostel });
     }, [loginMutation]);
 
     const logout = useCallback(() => {
@@ -84,6 +90,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         isLoggedIn,
         role,
         student,
+        hostelName,
         login,
         logout,
         isLoading: authQuery.isLoading,

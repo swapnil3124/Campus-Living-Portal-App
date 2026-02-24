@@ -26,8 +26,11 @@ import {
     Clock,
     ChevronDown,
     FileText,
+    Users,
+    ChevronRight,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 
 const { width } = Dimensions.get('window');
@@ -48,6 +51,7 @@ const initialAnnouncements = [
 
 export default function HomeManagementScreen() {
     const insets = useSafeAreaInsets();
+    const router = useRouter();
     const [settings, setSettings] = useState(initialSettings);
     const [announcements, setAnnouncements] = useState(initialAnnouncements);
     const [isSaving, setIsSaving] = useState(false);
@@ -103,6 +107,55 @@ export default function HomeManagementScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 <View style={styles.headerSection}>
+                    <Text style={styles.sectionTitle}>Management Modules</Text>
+                    <Text style={styles.sectionSubtitle}>Quick access to administrative tasks</Text>
+                </View>
+
+                <View style={styles.card}>
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.moduleBtn}
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push('/admin/admission-management' as any);
+                        }}
+                    >
+                        <View style={styles.settingInfo}>
+                            <View style={[styles.iconWrap, { backgroundColor: '#E0F2F1' }]}>
+                                <Users size={20} color={Colors.primary} />
+                            </View>
+                            <View>
+                                <Text style={styles.settingLabel}>Admission Management</Text>
+                                <Text style={styles.settingDesc}>Review and process hostel applications</Text>
+                            </View>
+                        </View>
+                        <ChevronRight size={20} color={Colors.textLight} />
+                    </TouchableOpacity>
+
+                    <View style={styles.divider} />
+
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.moduleBtn}
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push('/admin/leave-management' as any);
+                        }}
+                    >
+                        <View style={styles.settingInfo}>
+                            <View style={[styles.iconWrap, { backgroundColor: '#FFF9C4' }]}>
+                                <FileText size={20} color="#FBC02D" />
+                            </View>
+                            <View>
+                                <Text style={styles.settingLabel}>Leave Management</Text>
+                                <Text style={styles.settingDesc}>Review and approve student leaves</Text>
+                            </View>
+                        </View>
+                        <ChevronRight size={20} color={Colors.textLight} />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.headerSection}>
                     <Text style={styles.sectionTitle}>Home Page Visibility</Text>
                     <Text style={styles.sectionSubtitle}>Control what students see on the home screen</Text>
                 </View>
@@ -115,8 +168,8 @@ export default function HomeManagementScreen() {
                                 <Eye size={20} color={Colors.primary} />
                             </View>
                             <View>
-                                <Text style={styles.settingLabel}>Hostel Registration</Text>
-                                <Text style={styles.settingDesc}>Shows the "Apply" button</Text>
+                                <Text style={styles.settingLabel}>Admission Form</Text>
+                                <Text style={styles.settingDesc}>Control admission form visibility</Text>
                             </View>
                         </View>
                         <Switch
@@ -315,6 +368,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingVertical: 12,
+    },
+    moduleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 8,
     },
     settingInfo: {
         flexDirection: 'row',

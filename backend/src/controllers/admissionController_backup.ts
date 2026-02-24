@@ -1,0 +1,43 @@
+import { Request, Response } from 'express';
+import Admission from '../models/Admission';
+
+export const getAllAdmissions = async (req: Request, res: Response) => {
+    try {
+        const admissions = await Admission.find().sort({ appliedAt: -1 });
+        res.json(admissions);
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+export const createAdmission = async (req: Request, res: Response) => {
+    try {
+        const newAdmission = new Admission(req.body);
+        const savedAdmission = await newAdmission.save();
+        res.status(201).json(savedAdmission);
+    } catch (err: any) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
+export const updateAdmission = async (req: Request, res: Response) => {
+    try {
+        const updatedAdmission = await Admission.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true }
+        );
+        res.json(updatedAdmission);
+    } catch (err: any) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
+export const deleteAdmission = async (req: Request, res: Response) => {
+    try {
+        await Admission.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Admission deleted' });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+};

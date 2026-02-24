@@ -97,7 +97,7 @@ export interface MessMenu {
     fees: string;
 }
 
-export type UserRole = 'student' | 'admin' | 'rector' | 'contractor' | 'watchman' | null;
+export type UserRole = 'student' | 'admin' | null;
 
 export interface AuthState {
     isLoggedIn: boolean;
@@ -111,14 +111,6 @@ export interface Admission {
     enrollment: string;
     email: string;
     phone: string;
-    department: string;
-    prevMarks: string;
-    distance: string;
-    parentName: string;
-    category: string;
-    gender: 'male' | 'female' | 'other';
-    year: '1st' | '2nd' | '3rd';
-    photoUrl?: string;
     additionalData: Record<string, any>;
     status: 'pending' | 'verified' | 'accepted' | 'rejected';
     appliedAt: string;
