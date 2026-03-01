@@ -31,6 +31,8 @@ import {
     Key,
     User2,
     UtensilsCrossed,
+    Eye,
+    EyeOff,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -42,10 +44,12 @@ import { boysHostelNames, girlsHostelNames } from '@/mocks/data';
 function LoginScreen() {
     const { login, isLoginLoading } = useAuth();
     const [loginType, setLoginType] = useState<UserRole>(null);
+    const [rectorType, setRectorType] = useState<'boys' | 'girls' | null>(null);
     const [enrollment, setEnrollment] = useState<string>('');
     const [phone, setPhone] = useState<string>('');
     const [username, setUsername] = useState<string>('');
     const [password, setPassword] = useState<string>('');
+    const [showPassword, setShowPassword] = useState<boolean>(false);
     const [selectedHostel, setSelectedHostel] = useState<string>('');
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -75,16 +79,23 @@ function LoginScreen() {
                 return;
             }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            login('admin', selectedHostel);
+            login('admin', { hostel: selectedHostel, staffId: username.trim(), password: password.trim() });
+        } else if (loginType === 'rector') {
+            if (!rectorType || !username.trim() || !password.trim()) {
+                Alert.alert('Error', 'Please fill in all fields');
+                return;
+            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            login('rector', { staffId: username.trim(), password: password.trim() });
         } else {
             if (!username.trim() || !password.trim()) {
                 Alert.alert('Error', 'Please fill in all fields');
                 return;
             }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            login(loginType);
+            login(loginType, { staffId: username.trim(), password: password.trim() });
         }
-    }, [loginType, selectedHostel, username, password, login]);
+    }, [loginType, rectorType, selectedHostel, username, password, login]);
 
     const allHostels = [...boysHostelNames.map(h => ({ name: h, type: 'Boys' })), ...girlsHostelNames.map(h => ({ name: h, type: 'Girls' }))];
 
@@ -216,6 +227,28 @@ function LoginScreen() {
                                 </View>
                             )}
 
+                            {loginType === 'rector' && (
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Select Rector Role</Text>
+                                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                                        <TouchableOpacity
+                                            style={[styles.typeSelectionBtn, rectorType === 'boys' && styles.typeSelectionBtnActive]}
+                                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRectorType('boys'); }}
+                                        >
+                                            <User size={18} color={rectorType === 'boys' ? Colors.white : Colors.primary} />
+                                            <Text style={[styles.typeSelectionText, rectorType === 'boys' && styles.typeSelectionTextActive]}>Boys Hostel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.typeSelectionBtn, rectorType === 'girls' && styles.typeSelectionBtnActive]}
+                                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setRectorType('girls'); }}
+                                        >
+                                            <User2 size={18} color={rectorType === 'girls' ? Colors.white : Colors.primary} />
+                                            <Text style={[styles.typeSelectionText, rectorType === 'girls' && styles.typeSelectionTextActive]}>Girls Hostel</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+
                             {loginType === 'student' ? (
                                 <>
                                     <View style={styles.inputGroup}>
@@ -257,6 +290,7 @@ function LoginScreen() {
                                                 placeholder="Enter username"
                                                 placeholderTextColor={Colors.textLight}
                                                 value={username}
+                                                autoCapitalize="none"
                                                 onChangeText={setUsername}
                                             />
                                         </View>
@@ -269,10 +303,16 @@ function LoginScreen() {
                                                 style={styles.input}
                                                 placeholder="Enter password"
                                                 placeholderTextColor={Colors.textLight}
-                                                secureTextEntry
+                                                secureTextEntry={!showPassword}
                                                 value={password}
                                                 onChangeText={setPassword}
                                             />
+                                            <TouchableOpacity
+                                                onPress={() => setShowPassword(!showPassword)}
+                                                style={{ padding: 4 }}
+                                            >
+                                                {showPassword ? <EyeOff size={18} color={Colors.textLight} /> : <Eye size={18} color={Colors.textLight} />}
+                                            </TouchableOpacity>
                                         </View>
                                     </View>
                                 </>
@@ -306,12 +346,12 @@ function LoginScreen() {
                     </Animated.View>
                 )}
             </ScrollView>
-        </View>
+        </View >
     );
 }
 
 function ProfileScreen() {
-    const { student, role, logout } = useAuth();
+    const { student, role, userName, subRole, logout } = useAuth();
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -352,49 +392,45 @@ function ProfileScreen() {
                 style={[styles.profileHeader, { paddingTop: insets.top + 20 }]}
             >
                 <Animated.View style={[styles.profileHeaderContent, { opacity: fadeAnim }]}>
-                    <View style={styles.avatarContainer}>
-                        {role === 'student' ? (
-                            <Image
-                                source={{ uri: student?.photoUrl }}
-                                style={styles.profileAvatar}
-                                contentFit="cover"
-                            />
+                    <View style={styles.profileAvatarWrapper}>
+                        {role === 'student' && student?.photoUrl ? (
+                            <Image source={{ uri: student.photoUrl }} style={styles.profileMainAvatar} contentFit="cover" />
                         ) : (
-                            <View style={styles.adminAvatarCircle}>
-                                <ShieldCheck size={40} color={Colors.white} />
+                            <View style={[styles.profileMainAvatar, styles.center, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                <User size={50} color={Colors.white} />
                             </View>
                         )}
-                        <View style={styles.statusBadge}>
-                            <View style={styles.statusDotInner} />
-                            <Text style={styles.statusText}>{role === 'student' ? 'Student' : 'Warden'}</Text>
+                        <View style={styles.avatarEditBadge}>
+                            <Zap size={12} color={Colors.white} />
                         </View>
                     </View>
                     <Text style={styles.profileHeaderName}>
-                        {role === 'student' ? student?.name : 'Hostel Warden'}
+                        {role === 'student' ? student?.name : userName}
                     </Text>
                     <Text style={styles.profileHeaderSub}>
-                        {role === 'student' ? student?.enrollmentNo : 'Govt. Poly. Awasari'}
+                        {role === 'student' ? `${student?.enrollmentNo} • ${student?.department}` :
+                            role === 'rector' ? `${subRole?.toUpperCase()} HOSTEL RECTOR` : role?.toUpperCase()}
                     </Text>
                 </Animated.View>
             </LinearGradient>
 
-            <ScrollView contentContainerStyle={styles.profileScrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileScrollContent}>
                 <View style={styles.profileSection}>
-                    <Text style={styles.sectionTitle}>Personal Information</Text>
+                    <Text style={styles.sectionTitle}>Identity Details</Text>
                     <View style={styles.card}>
                         {role === 'student' ? (
                             <>
-                                <ProfileItem icon={Mail} label="Email Address" value={student?.email} color="#1565C0" />
-                                <ProfileItem icon={Phone} label="Phone Number" value={student?.phone} color="#2E7D32" />
-                                <ProfileItem icon={Calendar} label="Date of Birth" value={student?.dob} color="#E65100" />
-                                <ProfileItem icon={Briefcase} label="Department" value={student?.department} color="#6A1B9A" />
-                                <ProfileItem icon={Zap} label="Academic Year" value={student?.academicYear} color="#00838F" />
+                                <ProfileItem icon={User} label="Full Name" value={student?.name} />
+                                <ProfileItem icon={Mail} label="Email Address" value={student?.email} color="#4F46E5" />
+                                <ProfileItem icon={Phone} label="Contact Number" value={student?.phone} color="#10B981" />
+                                <ProfileItem icon={MapPin} label="Home Address" value={student?.parentAddress} color="#F59E0B" />
                             </>
                         ) : (
                             <>
-                                <ProfileItem icon={Mail} label="Contact Email" value="admin@gpawasari.ac.in" color="#1565C0" />
-                                <ProfileItem icon={Building2} label="Institute" value="Government Polytechnic Awasari" color="#2E7D32" />
-                                <ProfileItem icon={Zap} label="Access Level" value="Full System Access" color="#D84315" />
+                                <ProfileItem icon={User} label="Staff Name" value={userName} />
+                                <ProfileItem icon={ShieldCheck} label="System Role" value={role?.toUpperCase()} color="#4F46E5" />
+                                {subRole && <ProfileItem icon={Building2} label="Department" value={subRole?.toUpperCase() + ' HOSTEL'} color="#10B981" />}
+                                <ProfileItem icon={Briefcase} label="Organization" value="Gov Polytechnic Awasari" color="#F59E0B" />
                             </>
                         )}
                     </View>
@@ -718,26 +754,32 @@ const styles = StyleSheet.create({
     profileHeaderContent: {
         alignItems: 'center',
     },
-    avatarContainer: {
+    profileAvatarWrapper: {
+        width: 100,
+        height: 100,
+        alignSelf: 'center',
         marginBottom: 16,
         position: 'relative',
     },
-    profileAvatar: {
+    profileMainAvatar: {
         width: 100,
         height: 100,
         borderRadius: 50,
         borderWidth: 4,
         borderColor: 'rgba(255,255,255,0.3)',
     },
-    adminAvatarCircle: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+    avatarEditBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: Colors.primary,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 4,
-        borderColor: 'rgba(255,255,255,0.3)',
+        borderWidth: 3,
+        borderColor: Colors.white,
     },
     statusBadge: {
         position: 'absolute',
@@ -872,5 +914,29 @@ const styles = StyleSheet.create({
         color: Colors.error,
         fontSize: 16,
         fontWeight: '700' as const,
+    },
+    typeSelectionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#F8F9FA',
+        borderWidth: 1,
+        borderColor: '#E9ECEF',
+    },
+    typeSelectionBtnActive: {
+        backgroundColor: Colors.primary,
+        borderColor: Colors.primary,
+    },
+    typeSelectionText: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        color: Colors.textSecondary,
+    },
+    typeSelectionTextActive: {
+        color: Colors.white,
     },
 });

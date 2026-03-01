@@ -10,10 +10,11 @@ import {
     Platform,
     Modal,
     RefreshControl,
-    Image,
+    FlatList,
     Linking,
     ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -46,6 +47,7 @@ import {
 } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
@@ -70,12 +72,13 @@ export default function AdmissionManagementScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { hostelName } = useAuth();
-    const { admissions, updateAdmission, fetchAdmissions, isLoading, regConfig } = useAdmissionStore();
+    const { admissions, updateAdmission, fetchAdmissions, getAdmissionById, isLoading, regConfig } = useAdmissionStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAdmission, setSelectedAdmission] = useState<Admission | null>(null);
     const [isEditModalVisible, setIsEditModalVisible] = useState(false);
     const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isDetailLoading, setIsDetailLoading] = useState(false);
 
     // Filter States
     const [filterDept, setFilterDept] = useState<string | null>(null);
@@ -162,14 +165,20 @@ export default function AdmissionManagementScreen() {
 
     const baseList = useMemo(() => {
         let result = [...admissions];
-        // Apply Hostel-specific constraints
-        if (hostelName === 'Shivneri') {
+        const hNameRaw = hostelName?.toLowerCase() || '';
+
+        // Apply Warden-specific filtering constraints
+        if (hNameRaw === 'shivneri') {
+            // Shivneri Warden manages 1st Year Male students
             result = result.filter(adm => adm.year === '1st' && adm.gender?.toLowerCase() === 'male');
-        } else if (hostelName === 'Lenyadri') {
+        } else if (hNameRaw === 'lenyadri') {
+            // Lenyadri Warden manages 2nd Year Male students
             result = result.filter(adm => adm.year === '2nd' && adm.gender?.toLowerCase() === 'male');
-        } else if (hostelName === 'Bhimashankar') {
+        } else if (hNameRaw === 'bhimashankar') {
+            // Bhimashankar Warden manages 3rd Year Male students
             result = result.filter(adm => adm.year === '3rd' && adm.gender?.toLowerCase() === 'male');
-        } else if (hostelName === 'Saraswati' || hostelName === 'Shwetamber' || hostelName === 'Shwetambara') {
+        } else if (hNameRaw === 'saraswati' || hNameRaw === 'shwetamber' || hNameRaw === 'shwetambara' || hNameRaw === 'girls') {
+            // Girls' hostels see ALL female registrations
             result = result.filter(adm => adm.gender?.toLowerCase() === 'female');
         }
         return result;
@@ -185,8 +194,8 @@ export default function AdmissionManagementScreen() {
 
     const filteredAdmissions = useMemo(() => {
         let result = baseList.filter(adm =>
-            adm.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            adm.enrollment.toLowerCase().includes(searchQuery.toLowerCase())
+            (adm.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (adm.enrollment || '').toLowerCase().includes(searchQuery.toLowerCase())
         );
 
         if (filterDept) {
@@ -266,26 +275,11 @@ export default function AdmissionManagementScreen() {
 
     return (
         <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top + 10, justifyContent: 'space-between' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                        <ChevronLeft size={24} color={Colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Admission Review</Text>
-                </View>
-
-                {filterStatus === 'accepted' && (
-                    <TouchableOpacity
-                        style={styles.meritBtn}
-                        onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            router.push('/admin/merit-list-results');
-                        }}
-                    >
-                        <ListChecks size={20} color={Colors.primary} />
-                        <Text style={styles.meritBtnText}>RESULTS</Text>
-                    </TouchableOpacity>
-                )}
+            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                    <ChevronLeft size={24} color={Colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Admission Review</Text>
             </View>
 
             <View style={styles.searchBarWrap}>
@@ -293,11 +287,22 @@ export default function AdmissionManagementScreen() {
                     <Search size={20} color={Colors.textLight} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Search by name or enrollment..."
+                        placeholder="Search by name..."
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
                 </View>
+
+                <TouchableOpacity
+                    style={styles.searchMeritBtn}
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push('/admin/merit-list-results');
+                    }}
+                >
+                    <ListChecks size={20} color={Colors.white} />
+                    <Text style={styles.searchMeritBtnText}>Merit list</Text>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.quickFiltersWrapper}>
@@ -351,30 +356,46 @@ export default function AdmissionManagementScreen() {
                 </ScrollView>
             </View>
 
-            <ScrollView
+            <FlatList
+                data={filteredAdmissions}
+                keyExtractor={(adm) => adm.id}
                 contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 20 }}
                 refreshControl={
                     <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={[Colors.primary]} />
                 }
-            >
-                {isLoading && admissions.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>Loading admissions...</Text>
-                    </View>
-                ) : filteredAdmissions.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>No admissions found</Text>
-                        {(filterDept || filterCategory || filterGender) && (
-                            <TouchableOpacity onPress={resetFilters} style={{ marginTop: 12 }}>
-                                <Text style={{ color: Colors.primary, fontWeight: '600' }}>Clear all filters</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                ) : filteredAdmissions.map((adm) => (
+                ListHeaderComponent={
+                    <>
+                        {/* The searchBar and quickFilters are already rendered above the list in this layout.
+                            But if we want them to scroll WITH the list (better for performance/UX), 
+                            we should move them into ListHeaderComponent.
+                            Currently they are fixed at the top if we leave them out.
+                            Actually, the user had them above the ScrollView. 
+                            I will leave them above the FlatList for now to maintain the same UI,
+                            but FlatList itself is better than ScrollView map.
+                        */}
+                    </>
+                }
+                ListEmptyComponent={
+                    isLoading && admissions.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>Loading admissions...</Text>
+                        </View>
+                    ) : (
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>No admissions found</Text>
+                            {(filterDept || filterCategory || filterGender) && (
+                                <TouchableOpacity onPress={resetFilters} style={{ marginTop: 12 }}>
+                                    <Text style={{ color: Colors.primary, fontWeight: '600' }}>Clear all filters</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )
+                }
+                renderItem={({ item: adm }) => (
                     <View key={adm.id} style={styles.card}>
                         <View style={styles.cardHeader}>
                             {adm.photoUrl ? (
-                                <Image source={{ uri: adm.photoUrl }} style={styles.cardAvatar} resizeMode="cover" />
+                                <Image source={{ uri: adm.photoUrl }} style={styles.cardAvatar} contentFit="cover" />
                             ) : (
                                 <View style={styles.cardAvatarPlaceholder}>
                                     <User size={20} color={Colors.primary} />
@@ -386,7 +407,14 @@ export default function AdmissionManagementScreen() {
                             </View>
                             <TouchableOpacity
                                 style={[styles.statusBadge, { backgroundColor: Colors.primary + '15' }]}
-                                onPress={() => { setSelectedAdmission(adm); setIsEditModalVisible(true); }}
+                                onPress={async () => {
+                                    setSelectedAdmission(adm);
+                                    setIsEditModalVisible(true);
+                                    setIsDetailLoading(true);
+                                    const fullData = await getAdmissionById(adm.id);
+                                    if (fullData) setSelectedAdmission(fullData);
+                                    setIsDetailLoading(false);
+                                }}
                             >
                                 <Eye size={14} color={Colors.primary} style={{ marginRight: 4 }} />
                                 <Text style={[styles.statusText, { color: Colors.primary }]}>VIEW FORM</Text>
@@ -462,8 +490,8 @@ export default function AdmissionManagementScreen() {
                             )}
                         </View>
                     </View>
-                ))}
-            </ScrollView>
+                )}
+            />
 
             {/* Filter Modal */}
             <Modal
@@ -594,8 +622,10 @@ export default function AdmissionManagementScreen() {
                             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
                                 <View style={styles.detailHero}>
                                     <View style={styles.detailAvatarContainer}>
-                                        {selectedAdmission.photoUrl ? (
-                                            <Image source={{ uri: selectedAdmission.photoUrl }} style={styles.detailAvatar} resizeMode="cover" />
+                                        {isDetailLoading ? (
+                                            <ActivityIndicator size="large" color={Colors.primary} style={{ margin: 18 }} />
+                                        ) : selectedAdmission.photoUrl ? (
+                                            <Image source={{ uri: selectedAdmission.photoUrl }} style={styles.detailAvatar} contentFit="cover" />
                                         ) : (
                                             <User size={60} color={Colors.primary} />
                                         )}
@@ -693,7 +723,7 @@ export default function AdmissionManagementScreen() {
 
                     <View style={styles.viewerContent}>
                         {viewerUri && viewerType === 'image' ? (
-                            <Image source={{ uri: viewerUri }} style={styles.fullImage} resizeMode="contain" />
+                            <Image source={{ uri: viewerUri }} style={styles.fullImage} contentFit="contain" />
                         ) : (
                             <View style={styles.nonImageContent}>
                                 <FileText size={64} color="rgba(255,255,255,0.4)" />
@@ -729,17 +759,44 @@ export default function AdmissionManagementScreen() {
                         <Text style={styles.pdfFullscreenTitle} numberOfLines={1}>{fullscreenPdfName}</Text>
                     </View>
                     {fullscreenPdfUri && (
-                        <WebView
-                            source={{ html: buildPdfHtml(fullscreenPdfUri) }}
-                            style={styles.pdfFullscreenWebView}
-                            originWhitelist={['*']}
-                        />
+                        <SafePdfViewer uri={fullscreenPdfUri} buildHtml={buildPdfHtml} />
                     )}
                 </View>
             </Modal>
         </View >
     );
 }
+
+const SafePdfViewer = ({ uri, buildHtml }: { uri: string; buildHtml: (u: string) => string }) => {
+    const [localUri, setLocalUri] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const id = Math.random().toString(36).substring(7);
+        const fileUri = FileSystem.cacheDirectory + `pdf_viewer_${id}.html`;
+        FileSystem.writeAsStringAsync(fileUri, buildHtml(uri), { encoding: FileSystem.EncodingType.UTF8 })
+            .then(() => setLocalUri(fileUri))
+            .catch(console.error);
+    }, [uri, buildHtml]);
+
+    if (!localUri) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={{ color: '#fff', marginTop: 10 }}>Preparing Document...</Text>
+            </View>
+        );
+    }
+
+    return (
+        <WebView
+            source={{ uri: localUri }}
+            style={styles.pdfFullscreenWebView}
+            originWhitelist={['*']}
+            allowFileAccess={true}
+            allowUniversalAccessFromFileURLs={true}
+        />
+    );
+};
 
 const styles = StyleSheet.create({
     container: {
@@ -1266,20 +1323,26 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         letterSpacing: 0.5,
     },
-    meritBtn: {
+    searchMeritBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
-        backgroundColor: Colors.primary + '10',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 10,
-        marginRight: 16,
+        backgroundColor: Colors.primary,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 14,
+        height: 50,
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    meritBtnText: {
-        color: Colors.primary,
-        fontSize: 12,
+    searchMeritBtnText: {
+        color: Colors.white,
+        fontSize: 13,
         fontWeight: '800',
+        letterSpacing: 0.5,
     },
     countBadge: {
         backgroundColor: '#E9ECEF',

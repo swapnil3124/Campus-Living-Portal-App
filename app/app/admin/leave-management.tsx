@@ -82,6 +82,10 @@ export default function LeaveManagementScreen() {
                 });
             } else if (['saraswati', 'shwetamber', 'shwetambara'].includes(hName)) {
                 result = result.filter(l => l.hostelName?.toLowerCase() === hName);
+            } else if (hName === 'girls') {
+                result = result.filter(l => ['saraswati', 'shwetamber', 'shwetambara'].includes(l.hostelName?.toLowerCase() || ''));
+            } else if (hName === 'boys') {
+                result = result.filter(l => ['shivneri', 'lenyadri', 'bhimashankar'].includes(l.hostelName?.toLowerCase() || ''));
             }
         }
 

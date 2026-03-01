@@ -9,6 +9,8 @@ import {
     Dimensions,
     Platform,
     ImageBackground,
+    Modal,
+    Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +20,8 @@ import {
     Users,
     ChevronRight,
     ClipboardList,
+    BellRing,
+    X,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -38,13 +42,20 @@ const hostelImages: Record<string, any> = {
 
 
 import { useAdmissionStore } from '@/store/admission-store';
+import { useAnnouncementStore, Announcement } from '@/store/announcement-store';
 
 export default function HomeScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { regConfig, fetchRegConfig } = useAdmissionStore();
+    const { activeAnnouncements, fetchActiveAnnouncements } = useAnnouncementStore();
+    const [modalVisible, setModalVisible] = useState(false);
+    const [selectedAnn, setSelectedAnn] = useState<Announcement | null>(null);
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    // ... animation refs
+
+    // Marquee Animation
+    const marqueeAnim = useRef(new Animated.Value(width)).current;
+    const [textWidth, setTextWidth] = useState(0);
     const slideAnim = useRef(new Animated.Value(30)).current;
     const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
     const scaleAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(1))).current;
@@ -52,6 +63,7 @@ export default function HomeScreen() {
 
     useEffect(() => {
         fetchRegConfig();
+        fetchActiveAnnouncements();
         Animated.parallel([
             Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
             Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
@@ -73,6 +85,31 @@ export default function HomeScreen() {
             ])
         ).start();
     }, []);
+
+    useEffect(() => {
+        if (textWidth > 0) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(marqueeAnim, {
+                        toValue: -textWidth,
+                        duration: (textWidth + width) * 15,
+                        easing: Easing.linear,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(marqueeAnim, {
+                        toValue: width,
+                        duration: 0,
+                        useNativeDriver: true,
+                    }),
+                ])
+            ).start();
+        }
+    }, [textWidth, activeAnnouncements]);
+
+    const handleAnnouncementClick = (ann: Announcement) => {
+        setSelectedAnn(ann);
+        setModalVisible(true);
+    };
 
     const isRegistrationVisible = () => {
         if (!regConfig.isOpen) return false;
@@ -159,6 +196,30 @@ export default function HomeScreen() {
                         </View>
                     </Animated.View>
                 </LinearGradient>
+
+                {/* Announcement Bar */}
+                {activeAnnouncements.length > 0 && (
+                    <View style={styles.announcementBar}>
+                        <View style={styles.announcementBadge}>
+                            <Text style={styles.announcementBadgeText}>Announcements</Text>
+                            <BellRing size={14} color={Colors.white} style={{ marginLeft: 4 }} />
+                        </View>
+                        <View style={styles.marqueeContainer}>
+                            <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: marqueeAnim }] }}>
+                                <View onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}>
+                                    <View style={{ flexDirection: 'row' }}>
+                                        {activeAnnouncements.map((ann, idx) => (
+                                            <TouchableOpacity key={idx} onPress={() => handleAnnouncementClick(ann)} style={styles.marqueeItem}>
+                                                <Text style={styles.marqueeText}>{ann.message}</Text>
+                                                {idx < activeAnnouncements.length - 1 && <Text style={styles.marqueeDivider}> • </Text>}
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+                            </Animated.View>
+                        </View>
+                    </View>
+                )}
 
                 <View style={styles.content}>
 
@@ -338,6 +399,24 @@ export default function HomeScreen() {
                     <View style={{ height: 20 }} />
                 </View>
             </ScrollView>
+
+            <Modal visible={modalVisible} transparent={true} animationType="fade" onRequestClose={() => setModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Announcement</Text>
+                            <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                <X size={24} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.modalBody}>
+                            <Text style={styles.modalMsg}>{selectedAnn?.message}</Text>
+                            {!!selectedAnn?.details && <Text style={styles.modalDetails}>{selectedAnn.details}</Text>}
+                            <Text style={styles.modalDate}>Valid from: {selectedAnn?.startDate ? new Date(selectedAnn.startDate).toLocaleDateString() : ''}</Text>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -638,5 +717,90 @@ const styles = StyleSheet.create({
         fontWeight: '700' as const,
         color: Colors.primary,
         letterSpacing: 0.5,
+    },
+    announcementBar: {
+        flexDirection: 'row',
+        backgroundColor: '#E0F2F1',
+        borderBottomWidth: 1,
+        borderBottomColor: '#B2DFDB',
+        alignItems: 'center',
+    },
+    announcementBadge: {
+        flexDirection: 'row',
+        backgroundColor: '#00695C',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        alignItems: 'center',
+        zIndex: 2,
+    },
+    announcementBadgeText: {
+        color: Colors.white,
+        fontWeight: '700',
+        fontSize: 13,
+    },
+    marqueeContainer: {
+        flex: 1,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        paddingVertical: 8,
+    },
+    marqueeItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    marqueeText: {
+        color: '#004D40',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    marqueeDivider: {
+        color: '#00897B',
+        fontSize: 14,
+        fontWeight: '700',
+        marginHorizontal: 10,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        width: '85%',
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        maxHeight: '80%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text,
+    },
+    modalBody: {
+        marginBottom: 10,
+    },
+    modalMsg: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.text,
+        marginBottom: 10,
+    },
+    modalDetails: {
+        fontSize: 14,
+        color: Colors.textSecondary,
+        marginBottom: 16,
+        lineHeight: 22,
+    },
+    modalDate: {
+        fontSize: 12,
+        color: Colors.primary,
+        fontWeight: '500',
     },
 });

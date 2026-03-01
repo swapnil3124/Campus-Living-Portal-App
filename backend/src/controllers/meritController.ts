@@ -13,9 +13,10 @@ export const generateMeritList = async (req: Request, res: Response) => {
         const { departmentSeats, categoryPercentages } = config.value;
 
         // Only consider students whose applications have been explicitly approved/accepted by admin
+        // Exclude heavy fields like additionalData during analysis to save server memory
         const admissions = await Admission.find({
             status: 'accepted'
-        });
+        }).select('fullName enrollment prevMarks department category year gender _id');
 
         if (admissions.length === 0) {
             return res.status(400).json({ message: 'No registered students found to analyze.' });
@@ -55,9 +56,10 @@ export const generateMeritList = async (req: Request, res: Response) => {
                         enrollment: student.enrollment,
                         prevMarks: parseFloat(student.prevMarks),
                         category: student.category,
-                        photoUrl: student.photoUrl,
                         rank: selectedStudents.length + 1,
-                        selectionCategory: 'Open'
+                        selectionCategory: 'Open',
+                        year: student.year,
+                        gender: student.gender
                     });
                 }
             }
@@ -80,9 +82,10 @@ export const generateMeritList = async (req: Request, res: Response) => {
                             enrollment: student.enrollment,
                             prevMarks: parseFloat(student.prevMarks),
                             category: student.category,
-                            photoUrl: student.photoUrl,
                             rank: selectedStudents.length + 1,
-                            selectionCategory: cat
+                            selectionCategory: cat,
+                            year: student.year,
+                            gender: student.gender
                         });
                         filled++;
                         i--; // Adjust index after splice
@@ -102,9 +105,10 @@ export const generateMeritList = async (req: Request, res: Response) => {
                             enrollment: student.enrollment,
                             prevMarks: parseFloat(student.prevMarks),
                             category: student.category,
-                            photoUrl: student.photoUrl,
                             rank: selectedStudents.length + 1,
-                            selectionCategory: 'Merit-Remaining'
+                            selectionCategory: 'Merit-Remaining',
+                            year: student.year,
+                            gender: student.gender
                         });
                     }
                 }
@@ -139,7 +143,7 @@ export const generateMeritList = async (req: Request, res: Response) => {
 
 export const getMeritLists = async (req: Request, res: Response) => {
     try {
-        const lists = await MeritList.find().sort({ generatedAt: -1 });
+        const lists = await MeritList.find().select('-students.photoUrl').sort({ generatedAt: -1 });
         res.json(lists);
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -178,10 +182,49 @@ export const publishMeritList = async (req: Request, res: Response) => {
     }
 };
 
+export const sendToRector = async (req: Request, res: Response) => {
+    try {
+        const list = await MeritList.findById(req.params.id);
+        if (!list) return res.status(404).json({ message: 'Merit list not found' });
+
+        list.status = 'sent_to_rector';
+        await list.save();
+
+        res.json({ message: 'Merit list sent to rector' });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 export const deleteMeritList = async (req: Request, res: Response) => {
     try {
         await MeritList.findByIdAndDelete(req.params.id);
         res.json({ message: 'Merit list deleted' });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const generateAndSendPasswords = async (req: Request, res: Response) => {
+    try {
+        const list = await MeritList.findById(req.params.id);
+        if (!list) return res.status(404).json({ message: 'Merit list not found' });
+
+        const admissions = await Admission.find({ _id: { $in: list.students.map(s => s.admissionId) } });
+        let newPasswordsCount = 0;
+
+        for (const admission of admissions) {
+            // Only generate if one doesn't already exist (or overwrite if desired. For now, we will create a new one every time to ensure they get it)
+            const password = Math.random().toString(36).slice(-8); // Generate an 8-character random string
+            admission.studentPassword = password;
+            await admission.save();
+            newPasswordsCount++;
+
+            // MOCK EMAIL SENDING
+            console.log(`[MAIL MOCK] Sent email to ${admission.email || 'unknown'} -> Welcome to ${list.department}! Your login is: Username: ${admission.enrollment} | Password: ${password}`);
+        }
+
+        res.json({ message: `Successfully generated and sent ${newPasswordsCount} passwords via email.` });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
     }

@@ -61,6 +61,8 @@ interface AdmissionStore {
     meritLists: any[];
     fetchMeritLists: () => Promise<void>;
     publishMeritList: (id: string) => Promise<boolean>;
+    sendToRector: (id: string) => Promise<boolean>;
+    generatePasswords: (id: string) => Promise<boolean>;
     deleteMeritList: (id: string) => Promise<boolean>;
 }
 
@@ -95,9 +97,15 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
     error: null,
 
     fetchAdmissions: async () => {
+        if (get().isLoading) return;
         set({ isLoading: true, error: null });
         try {
-            const response = await fetch(`${API_URL}/admissions`);
+            const response = await fetch(`${API_URL}/admissions`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
             if (!response.ok) throw new Error('Failed to fetch admissions');
             const data = await response.json();
             const transformedData = data.map((adm: any) => ({
@@ -113,7 +121,12 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
 
     fetchRegConfig: async () => {
         try {
-            const response = await fetch(`${API_URL}/config/registration`);
+            const response = await fetch(`${API_URL}/config/registration`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
             if (response.ok) {
                 const data = await response.json();
                 let pages = data.value.pages || [];
@@ -403,7 +416,12 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
 
     fetchMeritLists: async () => {
         try {
-            const response = await fetch(`${API_URL}/merit`);
+            const response = await fetch(`${API_URL}/merit`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
             if (response.ok) {
                 const data = await response.json();
                 set({ meritLists: data });
@@ -418,6 +436,10 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         try {
             const response = await fetch(`${API_URL}/merit/generate`, {
                 method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
             });
             const data = await response.json();
             if (response.ok) {
@@ -434,40 +456,81 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
     },
 
     publishMeritList: async (id: string) => {
-        set({ isLoading: true });
         try {
             const response = await fetch(`${API_URL}/merit/${id}/publish`, {
                 method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
             });
-            if (response.ok) {
-                set({ isLoading: false });
-                return true;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `Server error: ${response.status}`);
             }
-            throw new Error('Failed to publish merit list');
-        } catch (err) {
-            console.error('publishMeritList Error:', err);
-            set({ isLoading: false });
+            return true;
+        } catch (err: any) {
+            console.error('publishMeritList Error:', err.message || err);
+            return false;
+        }
+    },
+
+    sendToRector: async (id: string) => {
+        try {
+            const response = await fetch(`${API_URL}/merit/${id}/send-to-rector`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `Server error: ${response.status}`);
+            }
+
+            return true;
+        } catch (err: any) {
+            console.error('sendToRector Error:', err.message || err);
+            return false;
+        }
+    },
+
+    generatePasswords: async (id: string) => {
+        try {
+            const response = await fetch(`${API_URL}/merit/${id}/generate-passwords`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `Server error: ${response.status}`);
+            }
+            return true;
+        } catch (err: any) {
+            console.error('generatePasswords Error:', err.message || err);
             return false;
         }
     },
 
     deleteMeritList: async (id: string) => {
-        set({ isLoading: true });
         try {
             const response = await fetch(`${API_URL}/merit/${id}`, {
                 method: 'DELETE',
             });
             if (response.ok) {
                 set((state) => ({
-                    meritLists: state.meritLists.filter(l => l._id !== id),
-                    isLoading: false
+                    meritLists: state.meritLists.filter(l => l._id !== id)
                 }));
                 return true;
             }
             throw new Error('Failed to delete merit list');
         } catch (err) {
             console.error('deleteMeritList Error:', err);
-            set({ isLoading: false });
             return false;
         }
     },

@@ -3,7 +3,10 @@ import Admission from '../models/Admission';
 
 export const getAllAdmissions = async (req: Request, res: Response) => {
     try {
-        const admissions = await Admission.find().sort({ appliedAt: -1 });
+        // Exclude heavy fields like additionalData which might contain multiple large base64 strings
+        const admissions = await Admission.find()
+            .select('-additionalData -photoUrl')
+            .sort({ appliedAt: -1 });
         res.json(admissions);
     } catch (err: any) {
         res.status(500).json({ message: err.message });

@@ -5,6 +5,9 @@ import mongoose from 'mongoose';
 import admissionRoutes from './routes/admissionRoutes';
 import configRoutes from './routes/configRoutes';
 import meritRoutes from './routes/meritRoutes';
+import authRoutes from './routes/authRoutes';
+import announcementRoutes from './routes/announcementRoutes';
+import { initializeStaff } from './controllers/authController';
 
 dotenv.config();
 
@@ -25,13 +28,16 @@ app.use((req, res, next) => {
 app.use('/api/admissions', admissionRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/merit', meritRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/campus_portal';
 
 mongoose.connect(MONGODB_URI)
-    .then(() => {
+    .then(async () => {
         console.log('Connected to MongoDB');
+        await initializeStaff();
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
         });

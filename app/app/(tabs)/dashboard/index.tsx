@@ -28,6 +28,7 @@ import {
     Building2,
     ShieldCheck,
     LogOut,
+    Bell,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -56,14 +57,26 @@ const adminDashboardItems = [
     { key: 'leave', label: 'Leave Management', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
     { key: 'emergency', label: 'Emergency Mgmt', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/admin/emergency' },
     { key: 'exit', label: 'Hostel Exit Mgmt', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/admin/exit' },
+    { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
 ];
 
-const rectorDashboardItems = [
-    { key: 'admission', label: 'Admission Review', icon: ClipboardList, color: '#00897B', bg: '#E0F2F1', route: '/admin/admission-management' },
+const boysRectorDashboardItems = [
+    { key: 'admission', label: 'Admission Review', icon: ClipboardList, color: '#00897B', bg: '#E0F2F1', route: '/admin/merit-list-results' },
     { key: 'students', label: 'Student Directory', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
     { key: 'notices', label: 'Official Notices', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
     { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
     { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
+    { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
+];
+
+const girlsRectorDashboardItems = [
+    { key: 'admission', label: 'Admission Review', icon: ClipboardList, color: '#00897B', bg: '#E0F2F1', route: '/admin/admission-management' },
+    { key: 'reg-settings', label: 'Registration Settings', icon: Calendar, color: Colors.primary, bg: Colors.primaryGhost, route: '/admin/registration-settings' },
+    { key: 'students', label: 'Student Directory', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
+    { key: 'notices', label: 'Official Notices', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
+    { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
+    { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
+    { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
 ];
 
 const contractorDashboardItems = [
@@ -179,20 +192,26 @@ function StudentDashboard() {
 
 function StaffDashboard() {
     const router = useRouter();
-    const { role } = useAuth();
+    const { role, subRole } = useAuth();
     const { admissions, fetchAdmissions } = useAdmissionStore();
     const pendingAdmissions = admissions.filter(a => a.status === 'pending').length;
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
+    const isGirlsHostel = typeof subRole === 'string' && ['saraswati', 'shwetambara', 'shwetamber', 'girls'].includes(subRole.toLowerCase());
+
     const items = useMemo(() => {
         switch (role) {
-            case 'rector': return rectorDashboardItems;
+            case 'rector':
+                return isGirlsHostel ? girlsRectorDashboardItems : boysRectorDashboardItems;
             case 'contractor': return contractorDashboardItems;
             case 'watchman': return watchmanDashboardItems;
-            default: return adminDashboardItems;
+            default:
+                return (role === 'admin' && isGirlsHostel)
+                    ? adminDashboardItems.filter(item => item.key !== 'admission' && item.key !== 'reg-settings')
+                    : adminDashboardItems;
         }
-    }, [role]);
+    }, [role, isGirlsHostel]);
 
     const cardAnims = useRef(items.map(() => new Animated.Value(0))).current;
     const scaleAnims = useRef(items.map(() => new Animated.Value(1))).current;
@@ -207,12 +226,14 @@ function StaffDashboard() {
     }, [role]);
 
     useEffect(() => {
-        if (role === 'admin' || role === 'rector') fetchAdmissions();
+        if ((role === 'rector' && isGirlsHostel) || (role === 'admin' && !isGirlsHostel)) {
+            fetchAdmissions();
+        }
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
         cardAnims.forEach((anim, i) => {
             Animated.timing(anim, { toValue: 1, duration: 400, delay: 200 + i * 80, useNativeDriver: true }).start();
         });
-    }, [role, items]);
+    }, [role, items, isGirlsHostel]);
 
     const handlePressIn = (i: number) => Animated.spring(scaleAnims[i], { toValue: 0.92, useNativeDriver: true }).start();
     const handlePressOut = (i: number) => Animated.spring(scaleAnims[i], { toValue: 1, friction: 3, useNativeDriver: true }).start();
@@ -231,11 +252,15 @@ function StaffDashboard() {
                             <Icon size={28} color={Colors.white} />
                         </View>
                         <View style={styles.profileInfo}>
-                            <Text style={styles.profileName}>{roleInfo.title}</Text>
+                            <Text style={styles.profileName}>
+                                {role === 'rector' ? `${subRole?.toUpperCase()} HOSTEL DASHBOARD` : roleInfo.title}
+                            </Text>
                             <Text style={styles.profileEnroll}>Government Polytechnic Awasari</Text>
                             <View style={styles.profileBadge}>
                                 <View style={[styles.statusDot, { backgroundColor: '#69F0AE' }]} />
-                                <Text style={styles.profileStatus}>{roleInfo.title} Control Panel</Text>
+                                <Text style={styles.profileStatus}>
+                                    {role === 'rector' && subRole ? `${subRole.charAt(0).toUpperCase() + subRole.slice(1)} Hostel Rector` : `${roleInfo.title} Control Panel`}
+                                </Text>
                             </View>
                         </View>
                     </View>
@@ -243,12 +268,30 @@ function StaffDashboard() {
             </LinearGradient>
 
             <ScrollView contentContainerStyle={styles.dashContent} showsVerticalScrollIndicator={false}>
-                {(role === 'admin' || role === 'rector') && (
+                {((role === 'rector' && isGirlsHostel) || (role === 'admin' && !isGirlsHostel)) && (
                     <View style={styles.adminStatsRow}>
                         <View style={styles.adminStatCard}>
                             <Text style={styles.adminStatVal}>{pendingAdmissions}</Text>
                             <Text style={styles.adminStatLab}>Pending Admissions</Text>
                         </View>
+                        <View style={styles.adminStatCard}>
+                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
+                            <Text style={styles.adminStatLab}>Open Complaints</Text>
+                        </View>
+                    </View>
+                )}
+
+                {(role === 'admin' && isGirlsHostel) && (
+                    <View style={styles.adminStatsRow}>
+                        <View style={styles.adminStatCard}>
+                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
+                            <Text style={styles.adminStatLab}>Open Complaints</Text>
+                        </View>
+                    </View>
+                )}
+
+                {role === 'rector' && !isGirlsHostel && (
+                    <View style={styles.adminStatsRow}>
                         <View style={styles.adminStatCard}>
                             <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
                             <Text style={styles.adminStatLab}>Open Complaints</Text>

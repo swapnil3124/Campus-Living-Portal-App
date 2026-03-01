@@ -203,7 +203,7 @@ export default function MeritListSettingsScreen() {
                                     style={styles.input}
                                     placeholder="0"
                                     keyboardType="number-pad"
-                                    value={deptSeats[dept]}
+                                    value={deptSeats[dept] || ''}
                                     onChangeText={(text) => setDeptSeats({ ...deptSeats, [dept]: text })}
                                 />
                             </View>
@@ -234,7 +234,7 @@ export default function MeritListSettingsScreen() {
                                         style={[styles.input, { borderColor: Colors.accent + '40', width: 60 }]}
                                         placeholder="0"
                                         keyboardType="decimal-pad"
-                                        value={catPercentages[cat]}
+                                        value={catPercentages[cat] || ''}
                                         onChangeText={(text) => setCatPercentages({ ...catPercentages, [cat]: text })}
                                     />
                                     <Text style={styles.percentageSymbol}>%</Text>

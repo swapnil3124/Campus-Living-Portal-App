@@ -10,9 +10,10 @@ import {
     Modal,
     Alert,
     Linking,
-    Image,
+    FlatList,
     Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -30,6 +31,7 @@ import {
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
+import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -51,6 +53,7 @@ import {
     Maximize2,
     X,
     ExternalLink,
+    Key,
 } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import * as XLSX from 'xlsx';
@@ -64,12 +67,33 @@ export default function MeritListResultsScreen() {
     const [isDetailLoading, setIsDetailLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [isPublishing, setIsPublishing] = useState(false);
-    const [filterDept, setFilterDept] = useState<string | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const { hostelName, role } = useAuth();
+
+    const [selectedRectorHostel, setSelectedRectorHostel] = useState<string | null>(null);
+
+    const isBoysHostel = ['shivneri', 'lenyadri', 'bhimashankar'].includes(hostelName?.toLowerCase() || '');
+    const isGirlsHostel = ['saraswati', 'shwetambara', 'shwetamber', 'girls'].includes(hostelName?.toLowerCase() || '');
+    const isWarden = role === 'admin' && (isBoysHostel || isGirlsHostel);
+    const isRector = role === 'rector' && ['boys', 'girls'].includes(hostelName?.toLowerCase() || '');
 
     React.useEffect(() => {
         fetchMeritLists();
         if (admissions.length === 0) fetchAdmissions();
     }, []);
+
+    const availableHostels = React.useMemo(() => {
+        if (!isRector) return [];
+        if (hostelName?.toLowerCase() === 'boys') return ['Shivneri', 'Lenyadri', 'Bhimashankar'];
+        if (hostelName?.toLowerCase() === 'girls') return ['Saraswati', 'Shwetambara'];
+        return [];
+    }, [isRector, hostelName]);
+
+    React.useEffect(() => {
+        if (isRector && availableHostels.length > 0 && !selectedRectorHostel) {
+            setSelectedRectorHostel(availableHostels[0]);
+        }
+    }, [isRector, availableHostels, selectedRectorHostel]);
 
     // In-app Viewer State (images use a separate viewer; PDFs expand inline inside the modal)
     const [viewerVisible, setViewerVisible] = useState(false);
@@ -297,6 +321,10 @@ export default function MeritListResultsScreen() {
     // Group merit lists by department and only take the newest one for each
     const latestListsMap = new Map();
     meritLists.forEach(list => {
+        // Rector ONLY sees lists from wardens that have been sent for review or published
+        if (isRector && list.status === 'draft') return;
+
+        // Group ALL lists strictly by department so we never have duplicate generation objects
         if (!latestListsMap.has(list.department) || new Date(list.generatedAt) > new Date(latestListsMap.get(list.department).generatedAt)) {
             latestListsMap.set(list.department, list);
         }
@@ -305,7 +333,7 @@ export default function MeritListResultsScreen() {
     const latestLists = Array.from(latestListsMap.values());
 
     // Combine all students from all departments
-    const allStudents = latestLists.flatMap(list =>
+    const allShortlisted = latestLists.flatMap(list =>
         list.students.map((s: any) => ({
             ...s,
             deptName: list.department,
@@ -314,26 +342,54 @@ export default function MeritListResultsScreen() {
         }))
     );
 
-    const departments = latestLists.map(l => l.department).sort();
+    // Filter Students based on Warden's Hostel
+    const allStudents = React.useMemo(() => {
+        let result = [...allShortlisted];
+        const hNameRaw = isRector && selectedRectorHostel ? selectedRectorHostel.toLowerCase() : (hostelName?.toLowerCase() || '');
 
-    let filteredResources = allStudents;
+        // If it's a warden/admin with a specific hostel, restrict view
+        if (hostelName) {
+            if (hNameRaw === 'shivneri') {
+                result = result.filter(s => s.year === '1st' && s.gender?.toLowerCase() === 'male');
+            } else if (hNameRaw === 'lenyadri') {
+                result = result.filter(s => s.year === '2nd' && s.gender?.toLowerCase() === 'male');
+            } else if (hNameRaw === 'bhimashankar') {
+                result = result.filter(s => s.year === '3rd' && s.gender?.toLowerCase() === 'male');
+            } else if (hNameRaw === 'saraswati' || hNameRaw === 'shwetamber' || hNameRaw === 'shwetambara') {
+                result = result.filter(s => s.gender?.toLowerCase() === 'female');
+            } else if (hNameRaw === 'boys') {
+                result = result.filter(s => s.gender?.toLowerCase() === 'male');
+            } else if (hNameRaw === 'girls') {
+                result = result.filter(s => s.gender?.toLowerCase() === 'female');
+            }
+        }
+        return result;
+    }, [allShortlisted, hostelName, role, selectedRectorHostel]);
 
-    // Apply Department Filter
-    if (filterDept) {
-        filteredResources = filteredResources.filter(s => s.deptName === filterDept);
-    }
+    const departments = Array.from(new Set(allStudents.map(s => s.deptName))).sort();
 
-    const filteredStudents = filteredResources.filter((s: any) =>
-        s.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.enrollment.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredStudents = allStudents.filter((s: any) =>
+        (s.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.enrollment || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     // Default sort by marks
     filteredStudents.sort((a, b) => b.prevMarks - a.prevMarks);
 
+    const draftWardenLists = React.useMemo(() => {
+        if (!isWarden) return [];
+        return latestLists.filter(l =>
+            l.status === 'draft' &&
+            l.students.some((s: any) => allStudents.some(as => as.admissionId === s.admissionId))
+        );
+    }, [latestLists, allStudents, isWarden]);
+
+    const hasDraftWardenLists = draftWardenLists.length > 0;
+
 
     const handleExportXLSX = async () => {
-        if (allStudents.length === 0) return;
+        if (allStudents.length === 0 || isExporting) return;
+        setIsExporting(true);
 
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -384,11 +440,98 @@ export default function MeritListResultsScreen() {
             }
         } catch (error) {
             console.error('Export Error:', error);
-            Alert.alert('Export Failed', 'Could not generate the Excel file.');
+            Alert.alert('Error', 'Failed to generate Excel file');
+        } finally {
+            setIsExporting(false);
         }
     };
 
     const handleBulkPublish = async () => {
+        if (isWarden) {
+            if (!hasDraftWardenLists) {
+                Alert.alert('Info', 'All your student merit lists have already been sent.');
+                return;
+            }
+
+            Alert.alert(
+                'Send to Rector',
+                `This will send ${allStudents.length} shortlisted students to the Boys Rector for final review. Continue?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Send',
+                        onPress: async () => {
+                            setIsPublishing(true);
+                            try {
+                                let successCount = 0;
+                                const { sendToRector } = useAdmissionStore.getState();
+                                for (const list of draftWardenLists) {
+                                    const success = await sendToRector(list._id);
+                                    if (success) successCount++;
+                                }
+
+                                if (successCount > 0) {
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                    Alert.alert('Success', `Successfully sent ${allStudents.length} students to the Rector for final review.`);
+                                    await useAdmissionStore.getState().fetchMeritLists();
+                                } else {
+                                    Alert.alert('Error', 'Failed to send students.');
+                                }
+                            } catch (e) {
+                                Alert.alert('Error', 'An unexpected error occurred during sending.');
+                            } finally {
+                                setIsPublishing(false);
+                            }
+                        }
+                    }
+                ]
+            );
+            return;
+        }
+
+        if (isRector) {
+            const rectorReviewLists = latestLists.filter(l => l.status === 'sent_to_rector');
+            if (rectorReviewLists.length === 0) {
+                Alert.alert('Info', 'There are no pending merit lists to publish to the homepage.');
+                return;
+            }
+
+            Alert.alert(
+                'Publish to Homepage',
+                `This will officially publish ${rectorReviewLists.length} hostel merit lists to the application homepage. Continue?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Publish',
+                        onPress: async () => {
+                            setIsPublishing(true);
+                            try {
+                                let successCount = 0;
+                                const { publishMeritList } = useAdmissionStore.getState();
+                                for (const list of rectorReviewLists) {
+                                    const success = await publishMeritList(list._id);
+                                    if (success) successCount++;
+                                }
+
+                                if (successCount > 0) {
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                    Alert.alert('Success', `Published ${successCount} lists to the Homepage.`);
+                                    await useAdmissionStore.getState().fetchMeritLists();
+                                } else {
+                                    Alert.alert('Error', 'Failed to publish lists.');
+                                }
+                            } catch (e) {
+                                Alert.alert('Error', 'An unexpected error occurred while publishing.');
+                            } finally {
+                                setIsPublishing(false);
+                            }
+                        }
+                    }
+                ]
+            );
+            return;
+        }
+
         const unpublishedLists = latestLists.filter(l => l.status !== 'published');
         if (unpublishedLists.length === 0) {
             Alert.alert('Info', 'All merit lists are already published.');
@@ -404,20 +547,68 @@ export default function MeritListResultsScreen() {
                     text: 'Publish All',
                     onPress: async () => {
                         setIsPublishing(true);
-                        let successCount = 0;
-                        for (const list of unpublishedLists) {
-                            const success = await publishMeritList(list._id);
-                            if (success) successCount++;
-                        }
+                        try {
+                            let successCount = 0;
+                            const { publishMeritList } = useAdmissionStore.getState();
+                            for (const list of unpublishedLists) {
+                                const success = await publishMeritList(list._id);
+                                if (success) successCount++;
+                            }
 
-                        if (successCount > 0) {
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                            Alert.alert('Success', `Published ${successCount} department lists.`);
-                            await fetchMeritLists();
-                        } else {
-                            Alert.alert('Error', 'Failed to publish lists.');
+                            if (successCount > 0) {
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                Alert.alert('Success', `Published ${successCount} department lists.`);
+                                await useAdmissionStore.getState().fetchMeritLists();
+                            } else {
+                                Alert.alert('Error', 'Failed to publish lists.');
+                            }
+                        } catch (e) {
+                            Alert.alert('Error', 'An unexpected error occurred while publishing.');
+                        } finally {
+                            setIsPublishing(false);
                         }
-                        setIsPublishing(false);
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleGeneratePasswords = async () => {
+        // Let rector click generate passwords on ALL published lists
+        const publishedLists = latestLists.filter(l => l.status === 'published');
+        if (publishedLists.length === 0) {
+            Alert.alert('Info', 'You must Publish merit lists to the home page first before generating passwords.');
+            return;
+        }
+
+        Alert.alert(
+            'Generate Emails & Passwords',
+            `This will generate secure login passwords and instantly send emails to all students from the ${publishedLists.length} published merit lists. Proceed?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Generate and Send',
+                    onPress: async () => {
+                        setIsPublishing(true);
+                        try {
+                            let successCount = 0;
+                            const { generatePasswords } = useAdmissionStore.getState();
+                            for (const list of publishedLists) {
+                                const success = await generatePasswords(list._id);
+                                if (success) successCount++;
+                            }
+
+                            if (successCount > 0) {
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                Alert.alert('Success', `Emails and Passwords dispatched for students in ${successCount} lists.`);
+                            } else {
+                                Alert.alert('Error', 'Failed to dispatch emails.');
+                            }
+                        } catch (e) {
+                            Alert.alert('Error', 'An unexpected error occurred generating passwords.');
+                        } finally {
+                            setIsPublishing(false);
+                        }
                     }
                 }
             ]
@@ -434,12 +625,38 @@ export default function MeritListResultsScreen() {
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Shortlisted Students</Text>
                     <TouchableOpacity
-                        style={styles.downloadBtn}
+                        style={[styles.downloadBtn, isExporting && { opacity: 0.5 }]}
                         onPress={handleExportXLSX}
+                        disabled={isExporting}
                     >
-                        <FileSpreadsheet size={20} color={Colors.primary} />
+                        {isExporting ? (
+                            <ActivityIndicator size="small" color={Colors.primary} />
+                        ) : (
+                            <FileSpreadsheet size={20} color={Colors.primary} />
+                        )}
                     </TouchableOpacity>
                 </View>
+
+                {isRector && availableHostels.length > 0 && (
+                    <View style={styles.rectorTabsContainer}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rectorTabsScroll}>
+                            {availableHostels.map(hostel => {
+                                const isActive = selectedRectorHostel === hostel;
+                                return (
+                                    <TouchableOpacity
+                                        key={hostel}
+                                        style={[styles.rectorTab, isActive && styles.rectorTabActive]}
+                                        onPress={() => setSelectedRectorHostel(hostel)}
+                                    >
+                                        <Text style={[styles.rectorTabText, isActive && styles.rectorTabTextActive]}>
+                                            {hostel}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                )}
 
                 {isLoading ? (
                     <View style={styles.loadingContainer}>
@@ -448,134 +665,184 @@ export default function MeritListResultsScreen() {
                     </View>
                 ) : allStudents.length === 0 ? (
                     <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyTitle}>No Generated Data</Text>
-                        <Text style={styles.emptyText}>Analyze registered student data first by generating a merit list from the config screen.</Text>
-                        <TouchableOpacity
-                            style={styles.actionBtn}
-                            onPress={() => router.replace('/admin/merit-list-settings')}
-                        >
-                            <Text style={styles.actionBtnText}>Go to Config</Text>
-                        </TouchableOpacity>
+                        {isRector ? (
+                            <>
+                                <Text style={styles.emptyTitle}>Admission Review Empty</Text>
+                                <Text style={styles.emptyText}>Waiting for Hostel Wardens to finalize and send their merit lists for your review.</Text>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={styles.emptyTitle}>No Generated Data</Text>
+                                <Text style={styles.emptyText}>Analyze registered student data first by generating a merit list from the config screen.</Text>
+                                <TouchableOpacity
+                                    style={styles.actionBtn}
+                                    onPress={() => router.replace('/admin/merit-list-settings')}
+                                >
+                                    <Text style={styles.actionBtnText}>Go to Config</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 ) : (
                     <View style={{ flex: 1 }}>
 
-                        <ScrollView
-                            style={styles.content}
+                        <FlatList
+                            data={filteredStudents}
+                            keyExtractor={(student, index) => `${student.enrollment}-${index}`}
                             contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
                             showsVerticalScrollIndicator={false}
-                        >
-                            {!filterDept && (
-                                <View style={styles.summaryCard}>
-                                    <View style={styles.summaryHeader}>
-                                        <View style={styles.iconCircle}>
-                                            <GraduationCap size={18} color={Colors.primary} />
+                            style={styles.content}
+                            ListHeaderComponent={
+                                <>
+                                    <View style={styles.summaryCard}>
+                                        <View style={styles.summaryHeader}>
+                                            <View style={styles.iconCircle}>
+                                                <GraduationCap size={18} color={Colors.primary} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.summaryTitle}>Shortlisted Overview</Text>
+                                                <Text style={styles.summaryDate}>
+                                                    Across {latestLists.length} Departments
+                                                </Text>
+                                            </View>
+                                            <View style={[styles.badge, (isWarden ? !hasDraftWardenLists : latestLists.every(l => l.status === 'published')) && { backgroundColor: '#2DCE89' }]}>
+                                                <Text style={styles.badgeText}>{isWarden ? (!hasDraftWardenLists ? 'SENT TO RECTOR' : 'PENDING') : (latestLists.every(l => l.status === 'published') ? 'ALL PUBLISHED' : 'PENDING PUBLISH')}</Text>
+                                            </View>
                                         </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.summaryTitle}>Shortlisted Overview</Text>
-                                            <Text style={styles.summaryDate}>
-                                                Across {latestLists.length} Departments
-                                            </Text>
-                                        </View>
-                                        <View style={[styles.badge, latestLists.every(l => l.status === 'published') && { backgroundColor: '#2DCE89' }]}>
-                                            <Text style={styles.badgeText}>{latestLists.every(l => l.status === 'published') ? 'ALL PUBLISHED' : 'PENDING PUBLISH'}</Text>
+                                        <View style={styles.divider} />
+                                        <View style={styles.summaryGrid}>
+                                            <View style={styles.summaryItem}>
+                                                <Text style={styles.summaryLabel}>Total Departments</Text>
+                                                <Text style={styles.summaryValue}>{departments.length}</Text>
+                                            </View>
+                                            <View style={styles.summaryItem}>
+                                                <Text style={styles.summaryLabel}>Total Shortlisted</Text>
+                                                <Text style={styles.summaryValue}>{allStudents.length}</Text>
+                                            </View>
                                         </View>
                                     </View>
-                                    <View style={styles.divider} />
-                                    <View style={styles.summaryGrid}>
-                                        <View style={styles.summaryItem}>
-                                            <Text style={styles.summaryLabel}>Total Departments</Text>
-                                            <Text style={styles.summaryValue}>{latestLists.length}</Text>
+
+                                    {hostelName && !isRector && (
+                                        <View style={[styles.summaryCard, { backgroundColor: Colors.primary + '05', borderColor: Colors.primary + '20', marginBottom: 16 }]}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                                <Building2 size={18} color={Colors.primary} />
+                                                <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.primary, textTransform: 'uppercase', letterSpacing: 1 }}>
+                                                    {hostelName} Hostel Merit List
+                                                </Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.summaryItem}>
-                                            <Text style={styles.summaryLabel}>Total Shortlisted</Text>
-                                            <Text style={styles.summaryValue}>{allStudents.length}</Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            )}
-
-                            <View style={styles.deptFilterWrapper}>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.deptTabs}>
-                                    <TouchableOpacity
-                                        style={[styles.deptTab, filterDept === null && styles.deptTabActive]}
-                                        onPress={() => {
-                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                            setFilterDept(null);
-                                        }}
-                                    >
-                                        <Text style={[styles.deptTabText, filterDept === null && styles.deptTabTextActive]}>All Depts</Text>
-                                    </TouchableOpacity>
-                                    {departments.map(dept => (
-                                        <TouchableOpacity
-                                            key={dept}
-                                            style={[styles.deptTab, filterDept === dept && styles.deptTabActive]}
-                                            onPress={() => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                                setFilterDept(dept);
-                                            }}
-                                        >
-                                            <Text style={[styles.deptTabText, filterDept === dept && styles.deptTabTextActive]}>
-                                                {dept.split(' ')[0]}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-
-                            <View style={styles.searchContainer}>
-                                <Search size={18} color={Colors.textLight} />
-                                <TextInput
-                                    style={styles.searchInput}
-                                    placeholder="Search Name or Enrollment..."
-                                    value={searchQuery}
-                                    onChangeText={setSearchQuery}
-                                    placeholderTextColor={Colors.textLight}
-                                />
-                                {searchQuery.length > 0 && (
-                                    <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                        <XCircle size={18} color={Colors.textLight} />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-
-                            <View style={styles.actionsRow}>
-                                <View style={[styles.actionIconButton, { backgroundColor: '#F8F9FA' }]}>
-                                    <Filter size={18} color={Colors.textSecondary} />
-                                    <Text style={[styles.actionIconText, { color: Colors.textSecondary }]}>
-                                        {filterDept ? `Filtering: ${filterDept.split(' ')[0]}` : 'Multi-Dept View'}
-                                    </Text>
-                                </View>
-
-                                <TouchableOpacity
-                                    style={[styles.actionIconButton, styles.publishBtn, isPublishing && { opacity: 0.7 }]}
-                                    onPress={handleBulkPublish}
-                                    disabled={isPublishing}
-                                >
-                                    {isPublishing ? (
-                                        <ActivityIndicator size="small" color={Colors.white} />
-                                    ) : (
-                                        <>
-                                            <Send size={18} color={Colors.white} />
-                                            <Text style={[styles.actionIconText, { color: Colors.white }]}>Publish All</Text>
-                                        </>
                                     )}
-                                </TouchableOpacity>
-                            </View>
 
-                            <View style={styles.sectionHeaderLine}>
-                                <Text style={styles.sectionTitle}>Merit Ranking</Text>
-                                <View style={styles.line} />
-                            </View>
+                                    <View style={styles.searchContainer}>
+                                        <Search size={18} color={Colors.textLight} />
+                                        <TextInput
+                                            style={styles.searchInput}
+                                            placeholder="Search Name or Enrollment..."
+                                            value={searchQuery}
+                                            onChangeText={setSearchQuery}
+                                            placeholderTextColor={Colors.textLight}
+                                        />
+                                        {searchQuery.length > 0 && (
+                                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                                <XCircle size={18} color={Colors.textLight} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
 
-                            {filteredStudents.length === 0 ? (
+                                    <View style={styles.actionsRow}>
+                                        {!isRector && (
+                                            <View style={[styles.actionIconButton, { backgroundColor: '#F8F9FA' }]}>
+                                                <Filter size={18} color={Colors.textSecondary} />
+                                                <Text style={[styles.actionIconText, { color: Colors.textSecondary }]}>
+                                                    Categorized View
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        {isRector && (
+                                            <TouchableOpacity
+                                                style={[styles.actionIconButton, { backgroundColor: '#F57C00' }, isPublishing && { opacity: 0.7 }]}
+                                                onPress={handleGeneratePasswords}
+                                                disabled={isPublishing}
+                                            >
+                                                {isPublishing ? (
+                                                    <ActivityIndicator size="small" color={Colors.white} />
+                                                ) : (
+                                                    <>
+                                                        <Key size={18} color={Colors.white} />
+                                                        <Text style={[styles.actionIconText, { color: Colors.white }]}>Generate Password</Text>
+                                                    </>
+                                                )}
+                                            </TouchableOpacity>
+                                        )}
+
+                                        {!isRector && (
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.actionIconButton,
+                                                    styles.publishBtn,
+                                                    (isPublishing || (isWarden ? !hasDraftWardenLists : !latestLists.some(l => l.status !== 'published'))) && { opacity: 0.5 }
+                                                ]}
+                                                onPress={handleBulkPublish}
+                                                disabled={isPublishing || (isWarden ? !hasDraftWardenLists : !latestLists.some(l => l.status !== 'published'))}
+                                            >
+                                                {isPublishing ? (
+                                                    <ActivityIndicator size="small" color={Colors.white} />
+                                                ) : (
+                                                    <>
+                                                        {isWarden ? (
+                                                            <>
+                                                                {hasDraftWardenLists ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
+                                                                <Text style={[styles.actionIconText, { color: Colors.white }]}>{hasDraftWardenLists ? 'Send to Rector' : 'Sent to Rector'}</Text>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                {latestLists.some(l => l.status !== 'published') ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
+                                                                <Text style={[styles.actionIconText, { color: Colors.white }]}>{latestLists.some(l => l.status !== 'published') ? 'Publish All' : 'All Published'}</Text>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </TouchableOpacity>
+                                        )}
+
+                                        {isRector && (
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.actionIconButton,
+                                                    styles.publishBtn,
+                                                    (isPublishing || !latestLists.some(l => l.status === 'sent_to_rector')) && { opacity: 0.5 }
+                                                ]}
+                                                onPress={handleBulkPublish}
+                                                disabled={isPublishing || !latestLists.some(l => l.status === 'sent_to_rector')}
+                                            >
+                                                {isPublishing ? (
+                                                    <ActivityIndicator size="small" color={Colors.white} />
+                                                ) : (
+                                                    <>
+                                                        {latestLists.some(l => l.status === 'sent_to_rector') ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
+                                                        <Text style={[styles.actionIconText, { color: Colors.white }]}>{latestLists.some(l => l.status === 'sent_to_rector') ? 'Publish to Home Page' : 'All Published'}</Text>
+                                                    </>
+                                                )}
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+
+                                    <View style={styles.sectionHeaderLine}>
+                                        <Text style={styles.sectionTitle}>Merit Ranking</Text>
+                                        <View style={styles.line} />
+                                    </View>
+                                </>
+                            }
+                            ListEmptyComponent={
                                 <View style={styles.noStudents}>
                                     <AlertCircle size={32} color={Colors.textLight} style={{ marginBottom: 12 }} />
                                     <Text style={styles.noStudentsText}>
                                         {searchQuery ? 'No students match your search.' : 'No shortlisted students found.'}
                                     </Text>
                                 </View>
-                            ) : filteredStudents.map((student: any, index: number) => (
+                            }
+                            renderItem={({ item: student, index }) => (
                                 <TouchableOpacity
                                     key={`${student.enrollment}-${index}`}
                                     style={styles.studentCard}
@@ -599,9 +866,9 @@ export default function MeritListResultsScreen() {
                                     </View>
                                     <View style={styles.cardAvatar}>
                                         {(() => {
-                                            const photo = student.photoUrl || admissions.find(a => a.id === student.admissionId)?.photoUrl;
+                                            const photo = student.photoUrl || admissions.find((a: any) => a.id === student.admissionId)?.photoUrl;
                                             return photo ? (
-                                                <Image source={{ uri: photo }} style={styles.avatarImage} resizeMode="cover" />
+                                                <Image source={{ uri: photo }} style={styles.avatarImage} contentFit="cover" />
                                             ) : (
                                                 <User size={22} color={Colors.primary} />
                                             );
@@ -618,6 +885,9 @@ export default function MeritListResultsScreen() {
                                             <View style={[styles.tag, { backgroundColor: '#F1F3F5' }]}>
                                                 <Text style={styles.tagTextSmall}>{student.category}</Text>
                                             </View>
+                                            <View style={[styles.tag, { backgroundColor: Colors.primary + '10' }]}>
+                                                <Text style={[styles.tagTextSmall, { color: Colors.primary }]}>{student.year} {student.gender}</Text>
+                                            </View>
                                         </View>
                                     </View>
                                     <View style={styles.marksContainer}>
@@ -625,8 +895,8 @@ export default function MeritListResultsScreen() {
                                         <Text style={styles.marksLabel}>{student.enrollment}</Text>
                                     </View>
                                 </TouchableOpacity>
-                            ))}
-                        </ScrollView>
+                            )}
+                        />
                     </View>
                 )}
 
@@ -669,7 +939,7 @@ export default function MeritListResultsScreen() {
                                     <View style={styles.detailHero}>
                                         <View style={styles.avatar}>
                                             {fullStudentData?.photoUrl ? (
-                                                <Image source={{ uri: fullStudentData.photoUrl }} style={styles.fullAvatar} resizeMode="cover" />
+                                                <Image source={{ uri: fullStudentData.photoUrl }} style={styles.fullAvatar} contentFit="cover" />
                                             ) : (
                                                 <User size={60} color={Colors.primary} />
                                             )}
@@ -728,9 +998,9 @@ export default function MeritListResultsScreen() {
                                                                                         field.id === 'studentPhoto' ? (fullStudentData?.photoUrl || viewingStudent.photoUrl) :
                                                                                             fullStudentData?.additionalData?.[field.id];
 
-                                                    if (!value && field.type !== 'file') return null;
+                                                    if (!value && field.type !== 'file' && field.type !== 'image') return null;
 
-                                                    if (field.type === 'file' && value) {
+                                                    if ((field.type === 'file' || field.type === 'image') && value) {
                                                         const uri = getFileUri(value);
                                                         const name = field.label; // Use labels for names
                                                         const isImg = isImageFile(value) || (typeof uri === 'string' && (uri.startsWith('data:image/') || /\.(jpg|jpeg|png|gif|webp)(\?|#|$)/i.test(uri)));
@@ -747,7 +1017,7 @@ export default function MeritListResultsScreen() {
                                                                         <Image
                                                                             source={{ uri }}
                                                                             style={styles.attachedImage}
-                                                                            resizeMode="contain"
+                                                                            contentFit="contain"
                                                                         />
                                                                         <TouchableOpacity
                                                                             style={styles.maximizeBtn}
@@ -772,23 +1042,10 @@ export default function MeritListResultsScreen() {
                                                                         </View>
                                                                     </View>
                                                                     <View style={styles.pdfFrame}>
-                                                                        <WebView
-                                                                            source={{ html: buildPdfHtml(uri) }}
+                                                                        <SafePdfViewer
+                                                                            uri={uri}
+                                                                            buildHtml={buildPdfHtml}
                                                                             style={styles.pdfWebView}
-                                                                            originWhitelist={['*']}
-                                                                            allowFileAccess
-                                                                            allowUniversalAccessFromFileURLs
-                                                                            javaScriptEnabled
-                                                                            domStorageEnabled
-                                                                            mixedContentMode="always"
-                                                                            scrollEnabled
-                                                                            startInLoadingState
-                                                                            renderLoading={() => (
-                                                                                <View style={styles.pdfLoadingOverlay}>
-                                                                                    <ActivityIndicator size="large" color={Colors.primary} />
-                                                                                    <Text style={styles.pdfLoadingText}>Loading PDF…</Text>
-                                                                                </View>
-                                                                            )}
                                                                         />
                                                                         <TouchableOpacity
                                                                             style={styles.maximizeBtn}
@@ -887,24 +1144,10 @@ export default function MeritListResultsScreen() {
                                 </View>
 
                                 {/* PDF WebView */}
-                                <WebView
-                                    key={fullscreenPdfUri}
-                                    source={{ html: buildPdfHtml(fullscreenPdfUri) }}
+                                <SafePdfViewer
+                                    uri={fullscreenPdfUri}
+                                    buildHtml={buildPdfHtml}
                                     style={styles.pdfFullscreenWebView}
-                                    originWhitelist={['*']}
-                                    allowFileAccess
-                                    allowUniversalAccessFromFileURLs
-                                    javaScriptEnabled
-                                    domStorageEnabled
-                                    mixedContentMode="always"
-                                    scrollEnabled
-                                    startInLoadingState
-                                    renderLoading={() => (
-                                        <View style={styles.pdfLoadingOverlay}>
-                                            <ActivityIndicator size="large" color={Colors.primary} />
-                                            <Text style={styles.pdfLoadingText}>Loading PDF…</Text>
-                                        </View>
-                                    )}
                                 />
                             </View>
                         )}
@@ -912,14 +1155,15 @@ export default function MeritListResultsScreen() {
                 </Modal>
 
 
-            </View>
+            </View >
 
             {/* Global Image/Document Viewer Modal */}
-            <Modal
+            < Modal
                 visible={viewerVisible}
                 transparent={true}
                 animationType="fade"
-                onRequestClose={() => setViewerVisible(false)}
+                onRequestClose={() => setViewerVisible(false)
+                }
             >
                 <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)' }}>
                     <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="dark" />
@@ -945,7 +1189,7 @@ export default function MeritListResultsScreen() {
                                 <Image
                                     source={{ uri: viewerUri as string }}
                                     style={styles.fullImage}
-                                    resizeMode="contain"
+                                    contentFit="contain"
                                 />
                             ) : (
                                 <View style={styles.nonImageContent}>
@@ -973,7 +1217,7 @@ export default function MeritListResultsScreen() {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </Modal>
+            </Modal >
         </>
     );
 }
@@ -1567,6 +1811,15 @@ const styles = StyleSheet.create({
     deptFilterWrapper: {
         marginBottom: 16,
     },
+    filterLabel: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: Colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 4,
+        marginLeft: 4,
+    },
     // Viewer Styles
     viewerContainer: {
         flex: 1,
@@ -1757,4 +2010,78 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
     },
+    rectorTabsContainer: {
+        marginBottom: 10,
+        backgroundColor: Colors.white,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderColor: Colors.border,
+    },
+    rectorTabsScroll: {
+        paddingHorizontal: 20,
+        gap: 12,
+    },
+    rectorTab: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: Colors.background,
+        borderWidth: 1,
+        borderColor: Colors.border,
+    },
+    rectorTabActive: {
+        backgroundColor: Colors.primary,
+        borderColor: Colors.primary,
+    },
+    rectorTabText: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        color: Colors.textSecondary,
+    },
+    rectorTabTextActive: {
+        color: Colors.white,
+    }
 });
+
+const SafePdfViewer = ({ uri, buildHtml, style }: { uri: string; buildHtml: (u: string) => string; style?: any }) => {
+    const [localUri, setLocalUri] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const id = Math.random().toString(36).substring(7);
+        const fileUri = FileSystem.cacheDirectory + `pdf_viewer_${id}.html`;
+        FileSystem.writeAsStringAsync(fileUri, buildHtml(uri), { encoding: FileSystem.EncodingType.UTF8 })
+            .then(() => setLocalUri(fileUri))
+            .catch(console.error);
+    }, [uri, buildHtml]);
+
+    if (!localUri) {
+        return (
+            <View style={[style, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={Colors.primary} />
+                <Text style={{ color: Colors.primary, marginTop: 10, fontWeight: '600' }}>Preparing PDF…</Text>
+            </View>
+        );
+    }
+
+    return (
+        <WebView
+            key={uri}
+            source={{ uri: localUri }}
+            style={style}
+            originWhitelist={['*']}
+            allowFileAccess={true}
+            allowUniversalAccessFromFileURLs={true}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            mixedContentMode="always"
+            scrollEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+                <View style={styles.pdfLoadingOverlay}>
+                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <Text style={styles.pdfLoadingText}>Loading PDF…</Text>
+                </View>
+            )}
+        />
+    );
+};
