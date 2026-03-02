@@ -1,0 +1,180 @@
+commit b6a109ba86881ccc43f8a40ac79fd321a94605ea
+Author: om1858 <ombhosle08@gmail.com>
+Date:   Sun Mar 1 23:19:15 2026 +0530
+
+    third commit
+
+M	app/app/(tabs)/(home)/index.tsx
+M	app/app/(tabs)/account/index.tsx
+M	app/app/(tabs)/dashboard/index.tsx
+M	app/app/admin/_layout.tsx
+M	app/app/admin/admission-management.tsx
+A	app/app/admin/announcements.tsx
+M	app/app/admin/leave-management.tsx
+M	app/app/admin/merit-list-results.tsx
+M	app/app/admin/merit-list-settings.tsx
+M	app/contexts/AuthContext.tsx
+M	app/store/admission-store.ts
+A	app/store/announcement-store.ts
+A	backend/BackendMerit.json
+A	backend/check_merits.js
+A	backend/check_merits2.js
+M	backend/src/controllers/admissionController.ts
+A	backend/src/controllers/announcementController.ts
+A	backend/src/controllers/authController.ts
+M	backend/src/controllers/meritController.ts
+M	backend/src/models/Admission.ts
+A	backend/src/models/Announcement.ts
+M	backend/src/models/MeritList.ts
+A	backend/src/models/Staff.ts
+A	backend/src/routes/announcementRoutes.ts
+A	backend/src/routes/authRoutes.ts
+M	backend/src/routes/meritRoutes.ts
+M	backend/src/server.ts
+A	backend/test_login.js
+A	backend/test_login2.js
+
+commit 757fcc1699879be7c8dae20bffe9666a85d9cd09
+Author: om1858 <ombhosle08@gmail.com>
+Date:   Tue Feb 24 21:23:59 2026 +0530
+
+    Third push
+
+M	app/app/(tabs)/account/index.tsx
+M	app/app/(tabs)/dashboard/index.tsx
+M	app/app/_layout.tsx
+M	app/app/admin/_layout.tsx
+M	app/app/admin/admission-management.tsx
+M	app/app/admin/home-management.tsx
+A	app/app/admin/leave-management.tsx
+A	app/app/admin/merit-list-results.tsx
+A	app/app/admin/merit-list-settings.tsx
+M	app/app/admin/registration-settings.tsx
+M	app/app/registration/index.tsx
+M	app/app/student/leave.tsx
+M	app/app/student/new-leave.tsx
+M	app/constants/types.ts
+M	app/mocks/data.ts
+M	app/package-lock.json
+M	app/package.json
+M	app/store/admission-store.ts
+A	app/store/leave-store.ts
+M	backend/src/controllers/admissionController.ts
+M	backend/src/controllers/configController.ts
+A	backend/src/controllers/meritController.ts
+A	backend/src/models/MeritList.ts
+M	backend/src/routes/admissionRoutes.ts
+A	backend/src/routes/meritRoutes.ts
+M	backend/src/server.ts
+M	backend/src/types.ts
+
+commit eff369e20736ae4a1cba8761d3b5796fff8d7e44
+Author: om1858 <ombhosle08@gmail.com>
+Date:   Sun Feb 22 22:57:41 2026 +0530
+
+    Second push
+
+A	app/.gitignore
+M	app/app/(tabs)/(home)/index.tsx
+M	app/app/(tabs)/_layout.tsx
+M	app/app/(tabs)/account/index.tsx
+A	app/app/(tabs)/dashboard/_layout.tsx
+A	app/app/(tabs)/dashboard/index.tsx
+M	app/app/_layout.tsx
+M	app/app/admin/_layout.tsx
+A	app/app/admin/admission-management.tsx
+M	app/app/admin/home-management.tsx
+A	app/app/admin/registration-settings.tsx
+M	app/app/registration/_layout.tsx
+M	app/app/registration/index.tsx
+M	app/constants/types.ts
+M	app/contexts/AuthContext.tsx
+M	app/package-lock.json
+M	app/package.json
+A	app/store/admission-store.ts
+A	backend/.env_backup
+A	backend/check-indexes.js
+A	backend/package-lock.json
+A	backend/package.json
+A	backend/package_backup.json
+A	backend/src/controllers/admissionController.ts
+A	backend/src/controllers/admissionController_backup.ts
+A	backend/src/controllers/configController.ts
+A	backend/src/models/Admission.ts
+A	backend/src/models/Admission_backup.ts
+A	backend/src/models/SystemConfig.ts
+A	backend/src/routes/admissionRoutes.ts
+A	backend/src/routes/admissionRoutes_backup.ts
+A	backend/src/routes/configRoutes.ts
+A	backend/src/server.ts
+A	backend/src/server_backup.ts
+A	backend/src/types.ts
+A	backend/src/types_backup.ts
+A	backend/tsconfig.json
+A	backend/tsconfig_backup.json
+
+commit 996f6ca9c025ce754d627799e0dd102531cf0aff
+Author: Swapnil Pasalkar <swapnilpasalkar1081@gmail.com>
+Date:   Sun Feb 22 00:40:51 2026 +0530
+
+    Add all project files and folders
+
+A	.gitignore
+A	app/README.md
+A	app/app.json
+A	app/app/(tabs)/(home)/_layout.tsx
+A	app/app/(tabs)/(home)/index.tsx
+A	app/app/(tabs)/_layout.tsx
+A	app/app/(tabs)/account/_layout.tsx
+A	app/app/(tabs)/account/index.tsx
+A	app/app/(tabs)/contact/_layout.tsx
+A	app/app/(tabs)/contact/index.tsx
+A	app/app/(tabs)/notices/_layout.tsx
+A	app/app/(tabs)/notices/index.tsx
+A	app/app/+native-intent.tsx
+A	app/app/+not-found.tsx
+A	app/app/_layout.tsx
+A	app/app/admin/_layout.tsx
+A	app/app/admin/home-management.tsx
+A	app/app/index.tsx
+A	app/app/onboarding.tsx
+A	app/app/registration/_layout.tsx
+A	app/app/registration/index.tsx
+A	app/app/student/_layout.tsx
+A	app/app/student/complaints.tsx
+A	app/app/student/emergency.tsx
+A	app/app/student/leave.tsx
+A	app/app/student/mess.tsx
+A	app/app/student/new-complaint.tsx
+A	app/app/student/new-leave.tsx
+A	app/app/student/profile.tsx
+A	app/app/student/room.tsx
+A	app/assets/images/Bhimashankar.png
+A	app/assets/images/Lenyadri.png
+A	app/assets/images/Saraswati.png
+A	app/assets/images/Shivneri.png
+A	app/assets/images/Shwetambara.png
+A	app/assets/images/adaptive-icon.png
+A	app/assets/images/favicon.png
+A	app/assets/images/icon.png
+A	app/assets/images/logo.png
+A	app/assets/images/splash-icon.png
+A	app/babel.config.js
+A	app/bun.lock
+A	app/constants/colors.ts
+A	app/constants/types.ts
+A	app/contexts/AuthContext.tsx
+A	app/eslint.config.js
+A	app/metro.config.js
+A	app/mocks/data.ts
+A	app/package-lock.json
+A	app/package.json
+A	app/tsconfig.json
+
+commit 415dfbedf5cb2584863a26bcbeff90a3726bfee9
+Author: Swapnil Pasalkar <swapnilpasalkar1081@gmail.com>
+Date:   Sun Feb 22 00:38:15 2026 +0530
+
+    first commit
+
+A	README.md
