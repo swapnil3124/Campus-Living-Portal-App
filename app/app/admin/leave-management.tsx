@@ -33,64 +33,55 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function LeaveManagementScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const { hostelName } = useAuth();
-    const { leaves, fetchLeaves, updateLeaveStatus, isLoading } = useLeaveStore();
+    const { hostelName, token } = useAuth();
+    const { leaves, fetchWardenLeaves, updateLeaveStatus, isLoading } = useLeaveStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedLeave, setSelectedLeave] = useState<LeaveApplication | null>(null);
     const [isActionModalVisible, setIsActionModalVisible] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    const formatDateTime = (dateStr: string) => {
+        if (!dateStr) return '---';
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            return date.toLocaleString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        } catch (e) {
+            return dateStr;
+        }
+    };
+
     useEffect(() => {
-        fetchLeaves();
-    }, []);
+        if (token && hostelName) {
+            fetchWardenLeaves(hostelName, token);
+        }
+    }, [hostelName, token]);
 
     const onRefresh = async () => {
+        if (!token || !hostelName) return;
         setIsRefreshing(true);
-        await fetchLeaves();
+        await fetchWardenLeaves(hostelName, token);
         setIsRefreshing(false);
     };
 
     const filteredLeaves = useMemo(() => {
         if (!leaves) return [];
 
-        let result = leaves.filter(l => {
+        return leaves.filter(l => {
             const name = l.studentName?.toLowerCase() || '';
             const id = l.studentId?.toLowerCase() || '';
             const query = searchQuery?.toLowerCase() || '';
             return name.includes(query) || id.includes(query);
         });
-
-        // Apply Warden/Hostel routing rules only if hostelName is provided
-        if (hostelName) {
-            const hName = hostelName.toLowerCase();
-
-            if (hName === 'shivneri') {
-                result = result.filter(l => {
-                    const year = l.studentYear?.toLowerCase() || '';
-                    return year.includes('first') || year.includes('1st');
-                });
-            } else if (hName === 'lenyadri') {
-                result = result.filter(l => {
-                    const year = l.studentYear?.toLowerCase() || '';
-                    return year.includes('second') || year.includes('2nd');
-                });
-            } else if (hName === 'bhimashankar') {
-                result = result.filter(l => {
-                    const year = l.studentYear?.toLowerCase() || '';
-                    return year.includes('third') || year.includes('3rd');
-                });
-            } else if (['saraswati', 'shwetamber', 'shwetambara'].includes(hName)) {
-                result = result.filter(l => l.hostelName?.toLowerCase() === hName);
-            } else if (hName === 'girls') {
-                result = result.filter(l => ['saraswati', 'shwetamber', 'shwetambara'].includes(l.hostelName?.toLowerCase() || ''));
-            } else if (hName === 'boys') {
-                result = result.filter(l => ['shivneri', 'lenyadri', 'bhimashankar'].includes(l.hostelName?.toLowerCase() || ''));
-            }
-        }
-
-        return result;
-    }, [leaves, searchQuery, hostelName]);
+    }, [leaves, searchQuery]);
 
     const handleAction = async (status: 'approved' | 'rejected') => {
         if (!selectedLeave) return;
@@ -101,7 +92,7 @@ export default function LeaveManagementScreen() {
         }
 
         try {
-            await updateLeaveStatus(selectedLeave.id, status, status === 'rejected' ? rejectionReason : undefined);
+            await updateLeaveStatus(selectedLeave.id, status, token || undefined, status === 'rejected' ? rejectionReason : undefined);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setIsActionModalVisible(false);
             setRejectionReason('');
@@ -166,6 +157,9 @@ export default function LeaveManagementScreen() {
                                     <Text style={styles.studentSub}>
                                         {(leave.studentYear || 'N/A')} • Room {leave.roomNo || 'N/A'}
                                     </Text>
+                                    <View style={styles.countBadge}>
+                                        <Text style={styles.countText}>Total Approved Leaves: {leave.leaveCount || 0}</Text>
+                                    </View>
                                 </View>
                                 <View style={[
                                     styles.statusBadge,
@@ -182,7 +176,9 @@ export default function LeaveManagementScreen() {
 
                             <View style={styles.infoRow}>
                                 <Calendar size={14} color={Colors.textLight} />
-                                <Text style={styles.infoValue}>{leave.fromDate || '---'} → {leave.toDate || '---'}</Text>
+                                <Text style={styles.infoValue}>
+                                    {formatDateTime(leave.fromDate)} → {formatDateTime(leave.toDate)}
+                                </Text>
                             </View>
 
                             <View style={styles.infoRow}>
@@ -228,7 +224,9 @@ export default function LeaveManagementScreen() {
                                     </View>
                                     <View style={styles.detailRow}>
                                         <Calendar size={16} color={Colors.primary} />
-                                        <Text style={styles.detailText}>{selectedLeave.fromDate} to {selectedLeave.toDate}</Text>
+                                        <Text style={styles.detailText}>
+                                            {formatDateTime(selectedLeave.fromDate)} to {formatDateTime(selectedLeave.toDate)}
+                                        </Text>
                                     </View>
                                     <View style={styles.detailRow}>
                                         <MapPin size={16} color={Colors.primary} />
@@ -365,6 +363,19 @@ const styles = StyleSheet.create({
     statusText: {
         fontSize: 10,
         fontWeight: '800',
+    },
+    countBadge: {
+        backgroundColor: 'rgba(0, 137, 123, 0.1)',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+        marginTop: 4,
+    },
+    countText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: Colors.primary,
     },
     infoRow: {
         flexDirection: 'row',

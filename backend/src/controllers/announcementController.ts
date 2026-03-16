@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Announcement } from '../models/Announcement';
+import MeritList from '../models/MeritList';
 
 export const getAnnouncements = async (req: Request, res: Response) => {
     try {
@@ -64,7 +65,20 @@ export const updateAnnouncement = async (req: Request, res: Response) => {
 export const deleteAnnouncement = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        await Announcement.findByIdAndDelete(id);
+        const announcement = await Announcement.findById(id);
+
+        if (announcement) {
+            await Announcement.findByIdAndDelete(id);
+
+            // Revert published merit lists if this was a merit list announcement
+            if (announcement.message?.startsWith('Merit List Published:')) {
+                await MeritList.updateMany(
+                    { status: 'published' },
+                    { $set: { status: 'sent_to_rector' } }
+                );
+            }
+        }
+
         res.status(200).json({ message: 'Announcement deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Error deleting announcement', error });

@@ -31,6 +31,7 @@ import {
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
+import { useAnnouncementStore } from '@/store/announcement-store';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
@@ -62,25 +63,32 @@ export default function MeritListResultsScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { meritLists, admissions, isLoading, publishMeritList, deleteMeritList, fetchMeritLists, fetchAdmissions, getAdmissionById, regConfig } = useAdmissionStore();
+    const { activeAnnouncements, fetchActiveAnnouncements } = useAnnouncementStore();
     const [viewingStudent, setViewingStudent] = useState<any | null>(null);
     const [fullStudentData, setFullStudentData] = useState<any | null>(null);
     const [isDetailLoading, setIsDetailLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [isPublishing, setIsPublishing] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-    const { hostelName, role } = useAuth();
+    const { hostelName, role, token, subRole } = useAuth();
+
+    const [generatedPasswords, setGeneratedPasswords] = useState<any[]>([]);
+    const [passwordsModalVisible, setPasswordsModalVisible] = useState(false);
 
     const [selectedRectorHostel, setSelectedRectorHostel] = useState<string | null>(null);
 
-    const isBoysHostel = ['shivneri', 'lenyadri', 'bhimashankar'].includes(hostelName?.toLowerCase() || '');
-    const isGirlsHostel = ['saraswati', 'shwetambara', 'shwetamber', 'girls'].includes(hostelName?.toLowerCase() || '');
+    const rawHostel = (subRole || hostelName || '').toLowerCase();
+    const isBoysHostel = ['shivneri', 'lenyadri', 'bhimashankar', 'boys'].some(h => rawHostel.includes(h));
+    const isGirlsHostel = ['saraswati', 'shwetambara', 'shwetamber', 'girls', 'jijau'].some(h => rawHostel.includes(h));
     const isWarden = role === 'admin' && (isBoysHostel || isGirlsHostel);
-    const isRector = role === 'rector' && ['boys', 'girls'].includes(hostelName?.toLowerCase() || '');
+    const isRector = role === 'rector' && ['boys', 'girls'].some(h => rawHostel.includes(h));
 
     React.useEffect(() => {
-        fetchMeritLists();
-        if (admissions.length === 0) fetchAdmissions();
-    }, []);
+        if (!token) return;
+        fetchMeritLists(token);
+        fetchActiveAnnouncements();
+        if (admissions.length === 0) fetchAdmissions(token);
+    }, [token]);
 
     const availableHostels = React.useMemo(() => {
         if (!isRector) return [];
@@ -334,12 +342,16 @@ export default function MeritListResultsScreen() {
 
     // Combine all students from all departments
     const allShortlisted = latestLists.flatMap(list =>
-        list.students.map((s: any) => ({
-            ...s,
-            deptName: list.department,
-            listId: list._id,
-            listStatus: list.status
-        }))
+        list.students.map((s: any) => {
+            const adm = admissions.find((a: any) => a._id === s.admissionId || a.id === s.admissionId);
+            return {
+                ...s,
+                deptName: list.department,
+                listId: list._id,
+                listStatus: list.status,
+                studentPassword: adm?.studentPassword
+            };
+        })
     );
 
     // Filter Students based on Warden's Hostel
@@ -355,8 +367,10 @@ export default function MeritListResultsScreen() {
                 result = result.filter(s => s.year === '2nd' && s.gender?.toLowerCase() === 'male');
             } else if (hNameRaw === 'bhimashankar') {
                 result = result.filter(s => s.year === '3rd' && s.gender?.toLowerCase() === 'male');
-            } else if (hNameRaw === 'saraswati' || hNameRaw === 'shwetamber' || hNameRaw === 'shwetambara') {
-                result = result.filter(s => s.gender?.toLowerCase() === 'female');
+            } else if (hNameRaw === 'saraswati') {
+                result = result.filter(s => s.year === '1st' && s.gender?.toLowerCase() === 'female');
+            } else if (hNameRaw === 'shwetamber' || hNameRaw === 'shwetambara') {
+                result = result.filter(s => ['2nd', '3rd'].includes(s.year) && s.gender?.toLowerCase() === 'female');
             } else if (hNameRaw === 'boys') {
                 result = result.filter(s => s.gender?.toLowerCase() === 'male');
             } else if (hNameRaw === 'girls') {
@@ -385,6 +399,11 @@ export default function MeritListResultsScreen() {
     }, [latestLists, allStudents, isWarden]);
 
     const hasDraftWardenLists = draftWardenLists.length > 0;
+
+    // Check if an announcement already exists for this rector's selected hostel
+    const isPublished = isRector && activeAnnouncements.some(a =>
+        a.message === `Merit List Published: ${selectedRectorHostel || 'Generic'} Hostel` && a.isActive
+    );
 
 
     const handleExportXLSX = async () => {
@@ -455,7 +474,7 @@ export default function MeritListResultsScreen() {
 
             Alert.alert(
                 'Send to Rector',
-                `This will send ${allStudents.length} shortlisted students to the Boys Rector for final review. Continue?`,
+                `This will send ${allStudents.length} shortlisted students to the Rector for final review. Continue?`,
                 [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -466,14 +485,14 @@ export default function MeritListResultsScreen() {
                                 let successCount = 0;
                                 const { sendToRector } = useAdmissionStore.getState();
                                 for (const list of draftWardenLists) {
-                                    const success = await sendToRector(list._id);
+                                const success = await sendToRector(list._id, token!);
                                     if (success) successCount++;
                                 }
 
                                 if (successCount > 0) {
                                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                     Alert.alert('Success', `Successfully sent ${allStudents.length} students to the Rector for final review.`);
-                                    await useAdmissionStore.getState().fetchMeritLists();
+                                    await useAdmissionStore.getState().fetchMeritLists(token!);
                                 } else {
                                     Alert.alert('Error', 'Failed to send students.');
                                 }
@@ -490,15 +509,14 @@ export default function MeritListResultsScreen() {
         }
 
         if (isRector) {
-            const rectorReviewLists = latestLists.filter(l => l.status === 'sent_to_rector');
-            if (rectorReviewLists.length === 0) {
+            if (isPublished || latestLists.length === 0) {
                 Alert.alert('Info', 'There are no pending merit lists to publish to the homepage.');
                 return;
             }
 
             Alert.alert(
                 'Publish to Homepage',
-                `This will officially publish ${rectorReviewLists.length} hostel merit lists to the application homepage. Continue?`,
+                `This will officially publish ${latestLists.length} hostel merit lists to the application homepage. Continue?`,
                 [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -507,21 +525,27 @@ export default function MeritListResultsScreen() {
                             setIsPublishing(true);
                             try {
                                 let successCount = 0;
+                                let errorMessage = '';
                                 const { publishMeritList } = useAdmissionStore.getState();
-                                for (const list of rectorReviewLists) {
-                                    const success = await publishMeritList(list._id);
-                                    if (success) successCount++;
+                                for (const list of latestLists) {
+                                    try {
+                                        const success = await publishMeritList(list._id, selectedRectorHostel || 'Generic', token!);
+                                        if (success) successCount++;
+                                    } catch (err: any) {
+                                        errorMessage = err.message || 'Error publishing list.';
+                                    }
                                 }
 
                                 if (successCount > 0) {
                                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                                     Alert.alert('Success', `Published ${successCount} lists to the Homepage.`);
-                                    await useAdmissionStore.getState().fetchMeritLists();
+                                    await useAdmissionStore.getState().fetchMeritLists(token!);
+                                    await useAnnouncementStore.getState().fetchActiveAnnouncements();
                                 } else {
-                                    Alert.alert('Error', 'Failed to publish lists.');
+                                    Alert.alert('Error', errorMessage || 'Failed to publish lists. Please check announcements.');
                                 }
-                            } catch (e) {
-                                Alert.alert('Error', 'An unexpected error occurred while publishing.');
+                            } catch (e: any) {
+                                Alert.alert('Error', e.message || 'An unexpected error occurred while publishing.');
                             } finally {
                                 setIsPublishing(false);
                             }
@@ -532,77 +556,70 @@ export default function MeritListResultsScreen() {
             return;
         }
 
-        const unpublishedLists = latestLists.filter(l => l.status !== 'published');
-        if (unpublishedLists.length === 0) {
-            Alert.alert('Info', 'All merit lists are already published.');
-            return;
-        }
-
-        Alert.alert(
-            'Publish All Lists',
-            `This will publish ${unpublishedLists.length} department lists and accept all shortlisted students. Continue?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Publish All',
-                    onPress: async () => {
-                        setIsPublishing(true);
-                        try {
-                            let successCount = 0;
-                            const { publishMeritList } = useAdmissionStore.getState();
-                            for (const list of unpublishedLists) {
-                                const success = await publishMeritList(list._id);
-                                if (success) successCount++;
-                            }
-
-                            if (successCount > 0) {
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                Alert.alert('Success', `Published ${successCount} department lists.`);
-                                await useAdmissionStore.getState().fetchMeritLists();
-                            } else {
-                                Alert.alert('Error', 'Failed to publish lists.');
-                            }
-                        } catch (e) {
-                            Alert.alert('Error', 'An unexpected error occurred while publishing.');
-                        } finally {
-                            setIsPublishing(false);
-                        }
-                    }
-                }
-            ]
-        );
+        // If neither Warden nor Rector, show Access Denied
+        Alert.alert('Access Denied', 'Only Rectors can publish merit lists to the homepage.');
     };
 
     const handleGeneratePasswords = async () => {
-        // Let rector click generate passwords on ALL published lists
+        if (allStudents.length === 0) {
+            Alert.alert('Info', `No shortlisted students found for ${selectedRectorHostel || 'this hostel'} yet.`);
+            return;
+        }
+
         const publishedLists = latestLists.filter(l => l.status === 'published');
         if (publishedLists.length === 0) {
-            Alert.alert('Info', 'You must Publish merit lists to the home page first before generating passwords.');
+            Alert.alert('Publish Required', 'You must Publish the merit lists to the homepage first before generating passwords and sending emails.');
+            return;
+        }
+
+        const validStudentIds = allStudents
+            .filter(s => publishedLists.some(l => l._id === s.listId))
+            .map(s => s.admissionId);
+
+        if (validStudentIds.length === 0) {
+            Alert.alert(
+                'Publish Required',
+                `Students from ${selectedRectorHostel || 'the selected hostel'} are still in "Pending Publish" status. Please click on the "Publish to Homepage" button first before generating their passwords.`
+            );
             return;
         }
 
         Alert.alert(
             'Generate Emails & Passwords',
-            `This will generate secure login passwords and instantly send emails to all students from the ${publishedLists.length} published merit lists. Proceed?`,
+            `This will generate secure login passwords and instantly send emails to ${validStudentIds.length} students from the selected hostel. Proceed?`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Generate and Send',
+                    text: 'Generate Passwords',
                     onPress: async () => {
                         setIsPublishing(true);
                         try {
                             let successCount = 0;
+                            let allGenerated: any[] = [];
                             const { generatePasswords } = useAdmissionStore.getState();
                             for (const list of publishedLists) {
-                                const success = await generatePasswords(list._id);
-                                if (success) successCount++;
+                                const listStudentIds = validStudentIds.filter((id: string) =>
+                                    allStudents.find((s: any) => s.admissionId === id && s.listId === list._id)
+                                );
+                                if (listStudentIds.length === 0) continue;
+
+                                const response = await generatePasswords(list._id, listStudentIds, token!);
+                                if (response.success) {
+                                    successCount++;
+                                    if (response.passwords) {
+                                        allGenerated = [...allGenerated, ...response.passwords];
+                                    }
+                                }
                             }
 
                             if (successCount > 0) {
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                Alert.alert('Success', `Emails and Passwords dispatched for students in ${successCount} lists.`);
+                                Alert.alert('Success', `Passwords generated successfully for ${allGenerated.length} students. You can now send them emails.`);
+                                setGeneratedPasswords(allGenerated);
+                                setPasswordsModalVisible(true);
+                                useAdmissionStore.getState().fetchAdmissions(token!); // Pull updated data
                             } else {
-                                Alert.alert('Error', 'Failed to dispatch emails.');
+                                Alert.alert('Error', 'Failed to generate passwords.');
                             }
                         } catch (e) {
                             Alert.alert('Error', 'An unexpected error occurred generating passwords.');
@@ -613,6 +630,69 @@ export default function MeritListResultsScreen() {
                 }
             ]
         );
+    };
+
+    const handleSendEmails = async () => {
+        if (generatedPasswords.length === 0) return;
+
+        Alert.alert(
+            'Dispatch Emails',
+            `Are you sure you want to send automated login credentials to all ${generatedPasswords.length} students?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Send Emails',
+                    onPress: async () => {
+                        setIsPublishing(true);
+                        try {
+                            const { sendEmails } = useAdmissionStore.getState();
+                            const response = await sendEmails(generatedPasswords, token!);
+
+                            if (response.success) {
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                Alert.alert('Success', response.message);
+                            } else {
+                                Alert.alert('Error', response.message || 'Failed to dispatch emails.');
+                            }
+                        } catch (error) {
+                            Alert.alert('Error', 'An unexpected error occurred while sending emails.');
+                        } finally {
+                            setIsPublishing(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleExportPasswords = async () => {
+        if (generatedPasswords.length === 0) return;
+        try {
+            const ws = XLSX.utils.json_to_sheet(generatedPasswords.map(p => ({
+                'Full Name': p.fullName,
+                'Enrollment No': p.enrollment,
+                'Email': p.email,
+                'Password': p.password
+            })));
+
+            ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 15 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Passwords');
+
+            const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+            const fileName = `Student_Passwords_${new Date().getFullYear()}.xlsx`;
+            const fileUri = FileSystem.cacheDirectory + fileName;
+
+            await FileSystem.writeAsStringAsync(fileUri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(fileUri);
+            } else {
+                Alert.alert('Error', 'Sharing not available');
+            }
+        } catch (e) {
+            Alert.alert('Error', 'Failed to export Excel.');
+        }
     };
 
 
@@ -760,20 +840,22 @@ export default function MeritListResultsScreen() {
                                         )}
 
                                         {isRector && (
-                                            <TouchableOpacity
-                                                style={[styles.actionIconButton, { backgroundColor: '#F57C00' }, isPublishing && { opacity: 0.7 }]}
-                                                onPress={handleGeneratePasswords}
-                                                disabled={isPublishing}
-                                            >
-                                                {isPublishing ? (
-                                                    <ActivityIndicator size="small" color={Colors.white} />
-                                                ) : (
-                                                    <>
-                                                        <Key size={18} color={Colors.white} />
-                                                        <Text style={[styles.actionIconText, { color: Colors.white }]}>Generate Password</Text>
-                                                    </>
-                                                )}
-                                            </TouchableOpacity>
+                                            <>
+                                                <TouchableOpacity
+                                                    style={[styles.actionIconButton, { backgroundColor: '#F57C00' }, isPublishing && { opacity: 0.7 }]}
+                                                    onPress={handleGeneratePasswords}
+                                                    disabled={isPublishing}
+                                                >
+                                                    {isPublishing ? (
+                                                        <ActivityIndicator size="small" color={Colors.white} />
+                                                    ) : (
+                                                        <>
+                                                            <Key size={16} color={Colors.white} />
+                                                            <Text style={[styles.actionIconText, { color: Colors.white, fontSize: 13 }]}>Generate Pass</Text>
+                                                        </>
+                                                    )}
+                                                </TouchableOpacity>
+                                            </>
                                         )}
 
                                         {!isRector && (
@@ -811,17 +893,17 @@ export default function MeritListResultsScreen() {
                                                 style={[
                                                     styles.actionIconButton,
                                                     styles.publishBtn,
-                                                    (isPublishing || !latestLists.some(l => l.status === 'sent_to_rector')) && { opacity: 0.5 }
+                                                    (isPublishing || isPublished || latestLists.length === 0) && { opacity: 0.5 }
                                                 ]}
                                                 onPress={handleBulkPublish}
-                                                disabled={isPublishing || !latestLists.some(l => l.status === 'sent_to_rector')}
+                                                disabled={isPublishing || isPublished || latestLists.length === 0}
                                             >
                                                 {isPublishing ? (
                                                     <ActivityIndicator size="small" color={Colors.white} />
                                                 ) : (
                                                     <>
-                                                        {latestLists.some(l => l.status === 'sent_to_rector') ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
-                                                        <Text style={[styles.actionIconText, { color: Colors.white }]}>{latestLists.some(l => l.status === 'sent_to_rector') ? 'Publish to Home Page' : 'All Published'}</Text>
+                                                        {!isPublished && latestLists.length > 0 ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
+                                                        <Text style={[styles.actionIconText, { color: Colors.white }]}>{!isPublished && latestLists.length > 0 ? 'Publish to Home Page' : 'All Published'}</Text>
                                                     </>
                                                 )}
                                             </TouchableOpacity>
@@ -1218,6 +1300,60 @@ export default function MeritListResultsScreen() {
                     </View>
                 </View>
             </Modal >
+
+            <Modal visible={passwordsModalVisible} transparent={true} animationType="slide" onRequestClose={() => setPasswordsModalVisible(false)}>
+                <View style={[styles.modalOverlay, { justifyContent: 'flex-end' }]}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <View>
+                                <Text style={styles.modalTitle}>Generated Passwords</Text>
+                                <Text style={styles.modalSub}>{generatedPasswords.length} Passwords generated</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setPasswordsModalVisible(false)} style={{ padding: 8, backgroundColor: Colors.background, borderRadius: 20 }}>
+                                <X size={20} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+                            <TouchableOpacity
+                                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1976D2', paddingVertical: 14, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, opacity: isPublishing ? 0.7 : 1 }}
+                                onPress={handleSendEmails}
+                                disabled={isPublishing}
+                            >
+                                {isPublishing ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Mail size={18} color={Colors.white} />
+                                        <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 15 }}>Send Email</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, paddingVertical: 14, borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}
+                                onPress={handleExportPasswords}
+                            >
+                                <FileSpreadsheet size={18} color={Colors.white} />
+                                <Text style={{ color: Colors.white, fontWeight: '700', fontSize: 15 }}>Export Excel</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+                            {generatedPasswords.map((p, idx) => (
+                                <View key={idx} style={[styles.studentCard, { flexDirection: 'column', alignItems: 'flex-start', gap: 6, opacity: 1 }]}>
+                                    <Text style={styles.studentName}>{p.fullName}</Text>
+                                    <Text style={[styles.modalSub, { marginTop: 0 }]}>Enrollment: {p.enrollment}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                                        <Key size={14} color={Colors.primary} />
+                                        <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.primary }}>{p.password}</Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </>
     );
 }

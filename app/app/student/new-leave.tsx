@@ -10,19 +10,19 @@ import {
     Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send, Calendar, MapPin, Navigation } from 'lucide-react-native';
+import { Send, Calendar, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import * as Location from 'expo-location';
 import Colors from '@/constants/colors';
 import { leaveTypes } from '@/mocks/data';
 import { useLeaveStore } from '@/store/leave-store';
-import { mockStudent } from '@/mocks/data';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function NewLeaveScreen() {
     const router = useRouter();
     const { addLeave, isLoading: isSubmitting } = useLeaveStore();
+    const { student } = useAuth();
     const [leaveType, setLeaveType] = useState<string>('');
     const [fromDate, setFromDate] = useState<Date>(new Date());
     const [toDate, setToDate] = useState<Date>(new Date());
@@ -31,37 +31,6 @@ export default function NewLeaveScreen() {
     const [reason, setReason] = useState<string>('');
     const [destination, setDestination] = useState<string>('');
     const [parentContact, setParentContact] = useState<string>('');
-    const [location, setLocation] = useState<Location.LocationObject | null>(null);
-    const [locationAddress, setLocationAddress] = useState<string>('');
-    const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-
-    const getLiveLocation = async () => {
-        setIsLoadingLocation(true);
-        try {
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission Denied', 'Please allow location access to submit leave application.');
-                return;
-            }
-
-            let loc = await Location.getCurrentPositionAsync({});
-            setLocation(loc);
-
-            let reverseGeocode = await Location.reverseGeocodeAsync({
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude
-            });
-
-            if (reverseGeocode.length > 0) {
-                const address = reverseGeocode[0];
-                setLocationAddress(`${address.name || ''}, ${address.city || ''}, ${address.region || ''}`);
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Could not fetch live location');
-        } finally {
-            setIsLoadingLocation(false);
-        }
-    };
 
     const handleSubmit = useCallback(async () => {
         if (!leaveType || !reason || !destination || !parentContact) {
@@ -79,21 +48,18 @@ export default function NewLeaveScreen() {
             return;
         }
 
-        if (!location) {
-            Alert.alert('Error', 'Please capture your live location');
-            return;
-        }
+
 
         try {
             await addLeave({
-                studentId: mockStudent.id,
-                studentName: mockStudent.name,
-                studentYear: mockStudent.year,
-                hostelName: mockStudent.hostelName,
-                roomNo: mockStudent.roomNo,
+                studentId: student?.id,
+                studentName: student?.name,
+                studentYear: student?.year,
+                hostelName: student?.hostelName,
+                roomNo: student?.roomNo,
                 leaveType,
-                fromDate: formatDate(fromDate),
-                toDate: formatDate(toDate),
+                fromDate: fromDate.toISOString(),
+                toDate: toDate.toISOString(),
                 reason,
                 destination,
                 parentContact,
@@ -108,10 +74,17 @@ export default function NewLeaveScreen() {
         } catch (error) {
             Alert.alert('Error', 'Failed to submit application');
         }
-    }, [leaveType, fromDate, toDate, reason, destination, parentContact, location, addLeave, router]);
+    }, [leaveType, fromDate, toDate, reason, destination, parentContact, addLeave, router]);
 
-    const formatDate = (date: Date) => {
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const formatDateDisplay = (date: Date) => {
+        return date.toLocaleString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
     };
 
     const showPicker = (type: 'from' | 'to') => {
@@ -167,7 +140,7 @@ export default function NewLeaveScreen() {
                     <TouchableOpacity style={styles.inputWrap} onPress={() => showPicker('from')}>
                         <Calendar size={16} color={Colors.textLight} />
                         <Text style={[styles.input, !fromDate && { color: Colors.textLight }]}>
-                            {formatDate(fromDate)}
+                            {formatDateDisplay(fromDate)}
                         </Text>
                     </TouchableOpacity>
                     {Platform.OS === 'ios' && showFromPicker && (
@@ -190,7 +163,7 @@ export default function NewLeaveScreen() {
                     <TouchableOpacity style={styles.inputWrap} onPress={() => showPicker('to')}>
                         <Calendar size={16} color={Colors.textLight} />
                         <Text style={[styles.input, !toDate && { color: Colors.textLight }]}>
-                            {formatDate(toDate)}
+                            {formatDateDisplay(toDate)}
                         </Text>
                     </TouchableOpacity>
                     {Platform.OS === 'ios' && showToPicker && (
@@ -249,32 +222,7 @@ export default function NewLeaveScreen() {
                 </View>
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.label}>Student Live Location</Text>
-                {!location ? (
-                    <TouchableOpacity
-                        style={styles.locationBtn}
-                        onPress={getLiveLocation}
-                        disabled={isLoadingLocation}
-                    >
-                        <Navigation size={18} color={Colors.primary} />
-                        <Text style={styles.locationBtnText}>
-                            {isLoadingLocation ? 'Fetching Location...' : 'Capture Live Location'}
-                        </Text>
-                    </TouchableOpacity>
-                ) : (
-                    <View style={styles.locationCaptured}>
-                        <Navigation size={18} color={Colors.success} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.locationText}>Location Captured</Text>
-                            <Text style={styles.addressText}>{locationAddress || 'Address fetched successfully'}</Text>
-                        </View>
-                        <TouchableOpacity onPress={getLiveLocation}>
-                            <Text style={styles.retryText}>Retry</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </View>
+
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.85}>
                 <LinearGradient
@@ -394,46 +342,5 @@ const styles = StyleSheet.create({
         fontWeight: '600' as const,
         color: Colors.white,
     },
-    locationBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 12,
-        backgroundColor: Colors.primaryGhost,
-        gap: 12,
-        borderWidth: 1.5,
-        borderColor: Colors.primary + '30',
-        borderStyle: 'dashed',
-    },
-    locationBtnText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: Colors.primary,
-    },
-    locationCaptured: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderRadius: 12,
-        backgroundColor: Colors.successLight,
-        gap: 12,
-        borderWidth: 1.5,
-        borderColor: Colors.success + '30',
-    },
-    locationText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: Colors.success,
-    },
-    addressText: {
-        fontSize: 12,
-        color: Colors.textSecondary,
-        marginTop: 2,
-    },
-    retryText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: Colors.primary,
-        padding: 8,
-    },
+
 });

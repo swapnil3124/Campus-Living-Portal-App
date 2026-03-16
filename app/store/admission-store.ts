@@ -5,23 +5,7 @@ import Constants from 'expo-constants';
 
 // Use your computer's IP address for physical devices
 // 10.0.2.2 is the alias for localhost in Android Emulator
-const getBaseUrl = () => {
-    // For Web, localhost is always correct
-    if (Platform.OS === 'web') return 'http://localhost:5000/api';
-
-    // In Expo, hostUri gives us the machine's IP address automatically
-    const debuggerHost = Constants.expoConfig?.hostUri;
-    const machineIp = debuggerHost?.split(':')[0];
-
-    if (machineIp) {
-        return `http://${machineIp}:5000/api`;
-    }
-
-    // Fallback for Android Emulator or generic localhost
-    return Platform.OS === 'android' ? 'http://10.0.2.2:5000/api' : 'http://localhost:5000/api';
-};
-
-const API_URL = getBaseUrl();
+import { API_URL } from '@/constants/config';
 
 interface AdmissionStore {
     admissions: Admission[];
@@ -44,11 +28,11 @@ interface AdmissionStore {
     };
     isLoading: boolean;
     error: string | null;
-    fetchAdmissions: () => Promise<void>;
+    fetchAdmissions: (token?: string) => Promise<void>;
     addAdmission: (admission: any) => Promise<boolean>;
-    updateAdmission: (id: string, updates: Partial<Admission>) => Promise<boolean>;
-    deleteAdmission: (id: string) => Promise<boolean>;
-    getAdmissionById: (id: string) => Promise<Admission | null>;
+    updateAdmission: (id: string, updates: Partial<Admission>, token?: string) => Promise<boolean>;
+    deleteAdmission: (id: string, token?: string) => Promise<boolean>;
+    getAdmissionById: (id: string, token?: string) => Promise<Admission | null>;
     fetchRegConfig: () => Promise<void>;
     updateRegConfig: (updates: any) => Promise<boolean>;
     meritListSettings: {
@@ -56,14 +40,15 @@ interface AdmissionStore {
         categoryPercentages: Record<string, number>;
     };
     fetchMeritListSettings: () => Promise<void>;
-    updateMeritListSettings: (settings: any) => Promise<boolean>;
-    generateMeritList: () => Promise<{ success: boolean; message: string }>;
+    updateMeritListSettings: (settings: any, token?: string) => Promise<boolean>;
+    generateMeritList: (token?: string) => Promise<{ success: boolean; message: string }>;
+    fetchMeritLists: (token?: string) => Promise<void>;
+    publishMeritList: (id: string, hostelName: string, token?: string) => Promise<boolean>;
+    sendToRector: (id: string, token?: string) => Promise<boolean>;
+    generatePasswords: (id: string, admissionIds?: string[], token?: string) => Promise<{ success: boolean; passwords?: any[] }>;
+    sendEmails: (students: any[], token?: string) => Promise<{ success: boolean; message: string }>;
     meritLists: any[];
-    fetchMeritLists: () => Promise<void>;
-    publishMeritList: (id: string) => Promise<boolean>;
-    sendToRector: (id: string) => Promise<boolean>;
-    generatePasswords: (id: string) => Promise<boolean>;
-    deleteMeritList: (id: string) => Promise<boolean>;
+    deleteMeritList: (id: string, token?: string) => Promise<boolean>;
 }
 
 export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
@@ -96,15 +81,22 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
     isLoading: false,
     error: null,
 
-    fetchAdmissions: async () => {
-        if (get().isLoading) return;
-        set({ isLoading: true, error: null });
+    fetchAdmissions: async (token?: string) => {
+        if (!token) return;
+        if (get().admissions.length === 0) {
+            set({ isLoading: true, error: null });
+        }
         try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
             const response = await fetch(`${API_URL}/admissions`, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers
             });
             if (!response.ok) throw new Error('Failed to fetch admissions');
             const data = await response.json();
@@ -115,7 +107,9 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             set({ admissions: transformedData, isLoading: false });
         } catch (err: any) {
             console.error('fetchAdmissions Error:', err);
-            set({ error: err.message, isLoading: false });
+            if (get().admissions.length === 0) {
+                set({ error: err.message, isLoading: false });
+            }
         }
     },
 
@@ -319,15 +313,18 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    updateAdmission: async (id, updates) => {
+    updateAdmission: async (id, updates, token?: string) => {
         set({ isLoading: true, error: null });
         try {
             // Strip id and _id from updates to avoid Mongoose immutable field errors
             const { id: _, _id: __, ...cleanUpdates } = updates as any;
 
+            const headers: any = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/admissions/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify(cleanUpdates),
             });
             if (!response.ok) {
@@ -350,11 +347,15 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    deleteAdmission: async (id) => {
+    deleteAdmission: async (id, token?: string) => {
         set({ isLoading: true, error: null });
         try {
+            const headers: any = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/admissions/${id}`, {
                 method: 'DELETE',
+                headers
             });
             if (!response.ok) throw new Error('Failed to delete admission');
 
@@ -370,9 +371,14 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    getAdmissionById: async (id) => {
+    getAdmissionById: async (id, token?: string) => {
         try {
-            const response = await fetch(`${API_URL}/admissions/${id}`);
+            const headers: any = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_URL}/admissions/${id}`, {
+                headers
+            });
             if (!response.ok) throw new Error('Failed to fetch admission');
             const data = await response.json();
             return { ...data, id: data._id };
@@ -394,12 +400,15 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    updateMeritListSettings: async (settings) => {
+    updateMeritListSettings: async (settings, token) => {
         set({ isLoading: true });
         try {
+            const headers: any = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/config`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ key: 'merit_list', value: settings }),
             });
             if (response.ok) {
@@ -414,13 +423,16 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    fetchMeritLists: async () => {
+    fetchMeritLists: async (token?: string) => {
         try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/merit`, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers
             });
             if (response.ok) {
                 const data = await response.json();
@@ -431,19 +443,21 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    generateMeritList: async () => {
+    generateMeritList: async (token?: string) => {
         set({ isLoading: true });
         try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/merit/generate`, {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers
             });
             const data = await response.json();
             if (response.ok) {
-                // Also update the local meritLists state with the newly generated lists
                 set({ meritLists: data.lists, isLoading: false });
                 return { success: true, message: data.message };
             }
@@ -455,14 +469,18 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    publishMeritList: async (id: string) => {
+    publishMeritList: async (id: string, hostelName: string, token?: string) => {
         try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/merit/${id}/publish`, {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers,
+                body: JSON.stringify({ hostelName })
             });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -475,14 +493,17 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    sendToRector: async (id: string) => {
+    sendToRector: async (id: string, token?: string) => {
         try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/merit/${id}/send-to-rector`, {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers
             });
 
             if (!response.ok) {
@@ -497,23 +518,51 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
         }
     },
 
-    generatePasswords: async (id: string) => {
+    generatePasswords: async (id: string, admissionIds?: string[], token?: string) => {
         try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/merit/${id}/generate-passwords`, {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                headers,
+                body: admissionIds ? JSON.stringify({ admissionIds }) : undefined
             });
+            const responseData = await response.json();
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || `Server error: ${response.status}`);
+                throw new Error(responseData.message || `Server error: ${response.status}`);
             }
-            return true;
+            return { success: true, passwords: responseData.passwords };
         } catch (err: any) {
             console.error('generatePasswords Error:', err.message || err);
-            return false;
+            return { success: false };
+        }
+    },
+
+    sendEmails: async (students: any[], token?: string) => {
+        try {
+            const headers: any = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_URL}/merit/send-emails`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ students })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || `Server error: ${response.status}`);
+            }
+            return { success: true, message: data.message };
+        } catch (err: any) {
+            console.error('sendEmails Error:', err.message || err);
+            return { success: false, message: err.message };
         }
     },
 

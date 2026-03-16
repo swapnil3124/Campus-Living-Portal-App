@@ -10,17 +10,24 @@ export interface Hostel {
 }
 
 export interface Notice {
+    _id?: string;
     id: string;
     title: string;
     description: string;
     date: string;
     issuedBy: string;
     priority: 'normal' | 'important' | 'urgent';
-    isNew: boolean;
+    isNew?: boolean;
     category: string;
+    hostelName: string;
+    isActive?: boolean;
+    fileUrl?: string;
+    fileName?: string;
+    createdAt?: string;
 }
 
 export interface Student {
+    _id: string;
     id: string;
     name: string;
     enrollmentNo: string;
@@ -31,13 +38,12 @@ export interface Student {
     bedNumber: string;
     department: string;
     year: string;
-    status: 'active' | 'on-leave' | 'exited';
+    status: 'active' | 'on-leave' | 'exited' | 'pending';
     phone: string;
     email: string;
-    dob: string;
     category: string;
     rollNo: string;
-    admissionType: string;
+    isRoomAllocated: boolean;
     dateOfJoining: string;
     feeStatus: 'paid' | 'pending' | 'partial';
     parentName: string;
@@ -45,10 +51,16 @@ export interface Student {
     parentContact: string;
     parentAddress: string;
     photoUrl: string;
+    dob?: string;
+    admissionType?: string;
+    gender: 'Male' | 'Female' | 'Other';
+    prevMarks: string;
+    distance: string;
     academicYear: string;
 }
 
 export interface Complaint {
+    _id?: string;
     id: string;
     type: string;
     description: string;
@@ -57,6 +69,11 @@ export interface Complaint {
     createdAt: string;
     updatedAt: string;
     wardenRemark?: string;
+    studentName?: string;
+    studentEnrollment?: string;
+    hostelName?: string;
+    roomNumber?: string;
+    imageUrl?: string;
 }
 
 export interface LeaveApplication {
@@ -75,6 +92,8 @@ export interface LeaveApplication {
     status: 'pending' | 'approved' | 'rejected';
     createdAt: string;
     rejectionReason?: string;
+    qrCodeToken?: string;
+    leaveCount?: number;
 }
 
 export interface RoomAsset {
@@ -122,4 +141,5 @@ export interface Admission {
     additionalData: Record<string, any>;
     status: 'pending' | 'verified' | 'accepted' | 'rejected';
     appliedAt: string;
+    studentPassword?: string;
 }

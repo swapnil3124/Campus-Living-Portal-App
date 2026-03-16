@@ -20,6 +20,7 @@ import {
     Hash,
     BedDouble,
     Users,
+    MapPin,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,10 +29,9 @@ interface InfoRowProps {
     icon: React.ReactNode;
     label: string;
     value: string;
-    editable?: boolean;
 }
 
-function InfoRow({ icon, label, value, editable }: InfoRowProps) {
+function InfoRow({ icon, label, value }: InfoRowProps) {
     return (
         <View style={styles.infoRow}>
             <View style={styles.infoIcon}>{icon}</View>
@@ -39,11 +39,6 @@ function InfoRow({ icon, label, value, editable }: InfoRowProps) {
                 <Text style={styles.infoLabel}>{label}</Text>
                 <Text style={styles.infoValue}>{value}</Text>
             </View>
-            {editable && (
-                <View style={styles.editBadge}>
-                    <Text style={styles.editBadgeText}>Edit</Text>
-                </View>
-            )}
         </View>
     );
 }
@@ -67,14 +62,6 @@ export default function ProfileScreen() {
 
     if (!student) return null;
 
-    const feeColors = {
-        paid: { bg: Colors.successLight, text: Colors.success, label: 'Paid' },
-        pending: { bg: Colors.warningLight, text: '#E65100', label: 'Pending' },
-        partial: { bg: Colors.infoLight, text: Colors.info, label: 'Partial' },
-    };
-
-    const feeStyle = feeColors[student.feeStatus];
-
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
             <Animated.View style={[styles.profileHeader, { opacity: fadeAnim }]}>
@@ -87,9 +74,6 @@ export default function ProfileScreen() {
                             <View style={[styles.statusDot, student.status === 'active' && { backgroundColor: Colors.success }]} />
                             <Text style={styles.statusText}>{student.status}</Text>
                         </View>
-                        <View style={[styles.feeBadge, { backgroundColor: feeStyle.bg }]}>
-                            <Text style={[styles.feeText, { color: feeStyle.text }]}>Fee: {feeStyle.label}</Text>
-                        </View>
                     </View>
                 </LinearGradient>
             </Animated.View>
@@ -98,10 +82,11 @@ export default function ProfileScreen() {
                 <Animated.View style={[styles.section, { opacity: sectionAnims[0], transform: [{ translateY: sectionAnims[0].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
                     <Text style={styles.sectionTitle}>Personal Information</Text>
                     <View style={styles.card}>
-                        <InfoRow icon={<Phone size={16} color={Colors.primary} />} label="Mobile" value={student.phone} editable />
-                        <InfoRow icon={<Mail size={16} color={Colors.primary} />} label="Email" value={student.email} editable />
-                        <InfoRow icon={<Calendar size={16} color={Colors.primary} />} label="Date of Birth" value={student.dob} />
+                        <InfoRow icon={<Phone size={16} color={Colors.primary} />} label="Mobile" value={student.phone} />
+                        <InfoRow icon={<Mail size={16} color={Colors.primary} />} label="Email" value={student.email} />
                         <InfoRow icon={<User size={16} color={Colors.primary} />} label="Category" value={student.category} />
+                        <InfoRow icon={<CreditCard size={16} color={Colors.primary} />} label="Merit Marks" value={student.prevMarks} />
+                        <InfoRow icon={<MapPin size={16} color={Colors.primary} />} label="Distance" value={student.distance} />
                     </View>
                 </Animated.View>
 
@@ -110,8 +95,7 @@ export default function ProfileScreen() {
                     <View style={styles.card}>
                         <InfoRow icon={<GraduationCap size={16} color={Colors.primary} />} label="Institute" value="Government Polytechnic Awasari" />
                         <InfoRow icon={<BookOpen size={16} color={Colors.primary} />} label="Department" value={student.department} />
-                        <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Year / Roll No" value={`${student.year} / ${student.rollNo}`} />
-                        <InfoRow icon={<CreditCard size={16} color={Colors.primary} />} label="Admission Type" value={student.admissionType} />
+                        <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Year / Enrollment No" value={`${student.year} / ${student.enrollmentNo}`} />
                     </View>
                 </Animated.View>
 
@@ -119,21 +103,21 @@ export default function ProfileScreen() {
                     <Text style={styles.sectionTitle}>Hostel Information</Text>
                     <View style={styles.card}>
                         <InfoRow icon={<Building2 size={16} color={Colors.primary} />} label="Hostel" value={student.hostelName} />
-                        <InfoRow icon={<BedDouble size={16} color={Colors.primary} />} label="Room / Bed" value={`${student.roomNo} / Bed ${student.bedNumber}`} />
-                        <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Floor" value={`Floor ${student.floor}`} />
+                        <InfoRow icon={<BedDouble size={16} color={Colors.primary} />} label="Room / Bed" value={student.isRoomAllocated ? `${student.roomNo} / Bed ${student.bedNumber}` : 'Not Allocated'} />
+                        {student.isRoomAllocated && <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Floor" value={`Floor ${student.floor}`} />}
                         <InfoRow icon={<Calendar size={16} color={Colors.primary} />} label="Date of Joining" value={student.dateOfJoining} />
                     </View>
                 </Animated.View>
 
-                <Animated.View style={[styles.section, { opacity: sectionAnims[3], transform: [{ translateY: sectionAnims[3].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
-                    <Text style={styles.sectionTitle}>Emergency Contact</Text>
-                    <View style={styles.card}>
-                        <InfoRow icon={<Users size={16} color={Colors.primary} />} label="Parent Name" value={student.parentName} editable />
-                        <InfoRow icon={<User size={16} color={Colors.primary} />} label="Relationship" value={student.parentRelation} />
-                        <InfoRow icon={<Phone size={16} color={Colors.primary} />} label="Contact" value={student.parentContact} editable />
-                        <InfoRow icon={<Building2 size={16} color={Colors.primary} />} label="Address" value={student.parentAddress} editable />
-                    </View>
-                </Animated.View>
+                {student.parentName && student.parentName !== 'N/A' && (
+                    <Animated.View style={[styles.section, { opacity: sectionAnims[3], transform: [{ translateY: sectionAnims[3].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+                        <Text style={styles.sectionTitle}>Guardian Details</Text>
+                        <View style={styles.card}>
+                            <InfoRow icon={<Users size={16} color={Colors.primary} />} label="Guardian Name" value={student.parentName} />
+                            <InfoRow icon={<Phone size={16} color={Colors.primary} />} label="Contact" value={student.parentContact} />
+                        </View>
+                    </Animated.View>
+                )}
             </View>
 
             <View style={{ height: 30 }} />
@@ -198,15 +182,6 @@ const styles = StyleSheet.create({
         color: Colors.text,
         textTransform: 'capitalize' as const,
     },
-    feeBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    feeText: {
-        fontSize: 12,
-        fontWeight: '600' as const,
-    },
     content: {
         padding: 16,
     },
@@ -260,16 +235,5 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500' as const,
         color: Colors.text,
-    },
-    editBadge: {
-        backgroundColor: Colors.primaryGhost,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 6,
-    },
-    editBadgeText: {
-        fontSize: 10,
-        fontWeight: '600' as const,
-        color: Colors.primary,
     },
 });

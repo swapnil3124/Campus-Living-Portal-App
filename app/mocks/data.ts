@@ -51,80 +51,10 @@ export const hostels: Hostel[] = [
     },
 ];
 
-export const notices: Notice[] = [
-    {
-        id: '1',
-        title: 'Hostel Admission Open 2025-26',
-        description: 'Applications are now open for hostel admission for the academic year 2025-26. Students are requested to apply before the deadline.',
-        date: '2025-07-15',
-        issuedBy: 'Hostel Office',
-        priority: 'urgent',
-        isNew: true,
-        category: 'Admission',
-    },
-    {
-        id: '2',
-        title: 'Last Date for Hostel Admission – 30th June 2025',
-        description: 'All students who wish to avail hostel facility must complete their admission process before 30th June 2025.',
-        date: '2025-06-15',
-        issuedBy: 'Hostel Office',
-        priority: 'important',
-        isNew: true,
-        category: 'Admission',
-    },
-    {
-        id: '3',
-        title: 'Selected Students List – Boys Hostel 2025-26',
-        description: 'The list of selected students for Boys Hostel has been published. Please check the notice board for details.',
-        date: '2025-07-05',
-        issuedBy: 'Warden Office',
-        priority: 'important',
-        isNew: true,
-        category: 'Selection',
-    },
-    {
-        id: '4',
-        title: 'Room Allotment Schedule – All Hostels',
-        description: 'Room allotment will be conducted on 10th July 2025. Students must report with required documents.',
-        date: '2025-07-01',
-        issuedBy: 'Hostel Office',
-        priority: 'normal',
-        isNew: false,
-        category: 'Allotment',
-    },
-    {
-        id: '5',
-        title: 'Mess Menu Updated – July 2025',
-        description: 'The mess menu for July 2025 has been updated. Please check the mess section for the latest menu.',
-        date: '2025-07-01',
-        issuedBy: 'Mess Committee',
-        priority: 'normal',
-        isNew: false,
-        category: 'Mess',
-    },
-    {
-        id: '6',
-        title: 'Hostel Rules & Regulations – Reminder',
-        description: 'All hostel residents are reminded to follow the hostel rules and regulations strictly.',
-        date: '2025-06-20',
-        issuedBy: 'Warden Office',
-        priority: 'important',
-        isNew: false,
-        category: 'General',
-    },
-    {
-        id: '7',
-        title: 'Water Supply Maintenance – 5th July',
-        description: 'Water supply will be interrupted on 5th July from 10 AM to 2 PM due to maintenance work.',
-        date: '2025-07-03',
-        issuedBy: 'Hostel Office',
-        priority: 'normal',
-        isNew: false,
-        category: 'General',
-    },
-];
+export const notices: Notice[] = [];
 
 export const mockStudent: Student = {
+    _id: 'STU001',
     id: 'STU001',
     name: 'Rahul Sharma',
     enrollmentNo: '2023EP001',
@@ -150,39 +80,13 @@ export const mockStudent: Student = {
     parentAddress: 'Pune, Maharashtra',
     photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face',
     academicYear: '2024-25',
+    isRoomAllocated: true,
+    gender: 'Male',
+    prevMarks: '85',
+    distance: '10',
 };
 
-export const mockComplaints: Complaint[] = [
-    {
-        id: 'C001',
-        type: 'Electricity',
-        description: 'Fan not working in room 204. Please repair it as soon as possible.',
-        priority: 'high',
-        status: 'in-progress',
-        createdAt: '2025-07-10',
-        updatedAt: '2025-07-11',
-        wardenRemark: 'Electrician assigned. Will be fixed by tomorrow.',
-    },
-    {
-        id: 'C002',
-        type: 'Water',
-        description: 'Low water pressure in the bathroom on 2nd floor.',
-        priority: 'medium',
-        status: 'pending',
-        createdAt: '2025-07-12',
-        updatedAt: '2025-07-12',
-    },
-    {
-        id: 'C003',
-        type: 'Room',
-        description: 'Window lock is broken and needs replacement.',
-        priority: 'low',
-        status: 'resolved',
-        createdAt: '2025-06-28',
-        updatedAt: '2025-07-02',
-        wardenRemark: 'Window lock replaced on 2nd July.',
-    },
-];
+export const mockComplaints: Complaint[] = [];
 
 export const mockLeaves: LeaveApplication[] = [
     {

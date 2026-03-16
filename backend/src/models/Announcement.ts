@@ -7,6 +7,7 @@ const AnnouncementSchema = new mongoose.Schema({
     endDate: { type: Date, required: true },
     isActive: { type: Boolean, default: true },
     createdBy: { type: String },
+    fileUrl: { type: String },
     createdAt: { type: Date, default: Date.now },
 });
 

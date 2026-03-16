@@ -14,6 +14,7 @@ export default function StudentLayout() {
         >
             <Stack.Screen name="profile" options={{ title: 'My Profile' }} />
             <Stack.Screen name="complaints" options={{ title: 'Complaints' }} />
+            <Stack.Screen name="notices" options={{ title: 'Official Notices' }} />
             <Stack.Screen name="new-complaint" options={{ title: 'New Complaint', presentation: 'modal' }} />
             <Stack.Screen name="mess" options={{ title: 'Mess' }} />
             <Stack.Screen name="room" options={{ title: 'Room Info' }} />

@@ -9,8 +9,11 @@ import {
     TextInput,
     Alert,
     ActivityIndicator,
+    Modal,
+    Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import {
@@ -33,6 +36,14 @@ import {
     UtensilsCrossed,
     Eye,
     EyeOff,
+    Edit2,
+    Contact,
+    CreditCard,
+    FileText,
+    ChevronDown,
+    X,
+    Save,
+    Download
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -63,13 +74,13 @@ function LoginScreen() {
     }, [loginType]);
 
     const handleStudentLogin = useCallback(() => {
-        if (!enrollment.trim() || !phone.trim()) {
+        if (!enrollment.trim() || !password.trim()) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        login('student');
-    }, [enrollment, phone, login]);
+        login('student', { staffId: enrollment.trim(), password: password.trim() });
+    }, [enrollment, password, login]);
 
     const handleStaffLogin = useCallback(() => {
         if (!loginType) return;
@@ -265,17 +276,23 @@ function LoginScreen() {
                                         </View>
                                     </View>
                                     <View style={styles.inputGroup}>
-                                        <Text style={styles.inputLabel}>Registered Mobile</Text>
+                                        <Text style={styles.inputLabel}>PASSWORD</Text>
                                         <View style={styles.inputWrap}>
-                                            <Smartphone size={18} color={Colors.primary} />
+                                            <Lock size={18} color={Colors.primary} />
                                             <TextInput
                                                 style={styles.input}
-                                                placeholder="Enter registered number"
+                                                placeholder="Enter password"
                                                 placeholderTextColor={Colors.textLight}
-                                                keyboardType="phone-pad"
-                                                value={phone}
-                                                onChangeText={setPhone}
+                                                secureTextEntry={!showPassword}
+                                                value={password}
+                                                onChangeText={setPassword}
                                             />
+                                            <TouchableOpacity
+                                                onPress={() => setShowPassword(!showPassword)}
+                                                style={{ padding: 4 }}
+                                            >
+                                                {showPassword ? <EyeOff size={18} color={Colors.textLight} /> : <Eye size={18} color={Colors.textLight} />}
+                                            </TouchableOpacity>
                                         </View>
                                     </View>
                                 </>
@@ -333,7 +350,6 @@ function LoginScreen() {
                                     ) : (
                                         <>
                                             <Text style={styles.primeButtonText}>Sign In to Account</Text>
-                                            <Zap size={18} color={Colors.white} />
                                         </>
                                     )}
                                 </LinearGradient>
@@ -379,7 +395,9 @@ function ProfileScreen() {
                 <Icon size={20} color={color} />
             </View>
             <View style={styles.profileItemContent}>
-                <Text style={styles.profileItemLabel}>{label}</Text>
+                <Text style={styles.profileItemLabel}>
+                    {label} <Lock size={10} color={Colors.textLight} />
+                </Text>
                 <Text style={styles.profileItemValue}>{value || 'N/A'}</Text>
             </View>
         </View>
@@ -400,9 +418,6 @@ function ProfileScreen() {
                                 <User size={50} color={Colors.white} />
                             </View>
                         )}
-                        <View style={styles.avatarEditBadge}>
-                            <Zap size={12} color={Colors.white} />
-                        </View>
                     </View>
                     <Text style={styles.profileHeaderName}>
                         {role === 'student' ? student?.name : userName}
@@ -411,61 +426,85 @@ function ProfileScreen() {
                         {role === 'student' ? `${student?.enrollmentNo} • ${student?.department}` :
                             role === 'rector' ? `${subRole?.toUpperCase()} HOSTEL RECTOR` : role?.toUpperCase()}
                     </Text>
+                    
+                    {role === 'student' && (
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <View style={[styles.headerPill, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                <Text style={styles.headerPillText}>{student?.gender === 'Female' ? 'Girls Hostel' : 'Boys Hostel'}</Text>
+                            </View>
+                            <View style={[styles.headerPill, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                <Text style={styles.headerPillText}>{student?.year}</Text>
+                            </View>
+                            <View style={[styles.headerPill, { backgroundColor: student?.status === 'active' ? '#10B981' : '#F59E0B' }]}>
+                                <Text style={styles.headerPillText}>{student?.status?.toUpperCase()}</Text>
+                            </View>
+                        </View>
+                    )}
                 </Animated.View>
             </LinearGradient>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileScrollContent}>
+                
+                {/* 1. PERSONAL INFORMATION */}
                 <View style={styles.profileSection}>
-                    <Text style={styles.sectionTitle}>Identity Details</Text>
+                    <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionTitle}>Profile Details</Text>
+                    </View>
                     <View style={styles.card}>
                         {role === 'student' ? (
                             <>
                                 <ProfileItem icon={User} label="Full Name" value={student?.name} />
-                                <ProfileItem icon={Mail} label="Email Address" value={student?.email} color="#4F46E5" />
-                                <ProfileItem icon={Phone} label="Contact Number" value={student?.phone} color="#10B981" />
-                                <ProfileItem icon={MapPin} label="Home Address" value={student?.parentAddress} color="#F59E0B" />
+                                <ProfileItem icon={Contact} label="Gender" value={student?.gender || 'Male'} color="#EC4899" />
+                                <ProfileItem icon={CreditCard} label="Category" value={student?.category} color="#F59E0B" />
+                                <ProfileItem icon={Phone} label="Mobile" value={student?.phone} color="#10B981" />
+                                <ProfileItem icon={Mail} label="Email" value={student?.email} color="#3B82F6" />
                             </>
                         ) : (
                             <>
                                 <ProfileItem icon={User} label="Staff Name" value={userName} />
                                 <ProfileItem icon={ShieldCheck} label="System Role" value={role?.toUpperCase()} color="#4F46E5" />
                                 {subRole && <ProfileItem icon={Building2} label="Department" value={subRole?.toUpperCase() + ' HOSTEL'} color="#10B981" />}
-                                <ProfileItem icon={Briefcase} label="Organization" value="Gov Polytechnic Awasari" color="#F59E0B" />
                             </>
                         )}
                     </View>
                 </View>
 
                 {role === 'student' && (
-                    <View style={styles.profileSection}>
-                        <Text style={styles.sectionTitle}>Hostel Details</Text>
-                        <View style={styles.card}>
-                            <ProfileItem icon={Building2} label="Hostel Name" value={student?.hostelName} color="#00897B" />
-                            <ProfileItem icon={Key} label="Room & Bed" value={`Room ${student?.roomNo}, Bed ${student?.bedNumber}`} color="#C62828" />
-                            <ProfileItem icon={MapPin} label="Floor" value={`${student?.floor}${student?.floor === 1 ? 'st' : student?.floor === 2 ? 'nd' : 'rd'} Floor`} color="#455A64" />
+                    <>
+                        {/* 2. ACADEMIC & MERIT INFORMATION */}
+                        <View style={styles.profileSection}>
+                            <Text style={styles.sectionTitle}>Academic & Merit Details</Text>
+                            <View style={styles.card}>
+                                <ProfileItem icon={Building2} label="Institute" value="Govt. Polytechnic Awasari" color="#475569" />
+                                <ProfileItem icon={Briefcase} label="Department" value={student?.department} color="#3B82F6" />
+                                <ProfileItem icon={FileText} label="Merit Marks" value={student?.prevMarks} color="#8B5CF6" />
+                                <ProfileItem icon={MapPin} label="Distance from College" value={student?.distance || 'N/A'} color="#10B981" />
+                                <ProfileItem icon={Key} label="Enrollment No" value={student?.enrollmentNo} color="#F59E0B" />
+                            </View>
                         </View>
-                    </View>
-                )}
 
-                <View style={styles.profileSection}>
-                    <Text style={styles.sectionTitle}>Account Settings</Text>
-                    <View style={styles.card}>
-                        <TouchableOpacity style={styles.settingRow}>
-                            <View style={[styles.settingIcon, { backgroundColor: '#F5F5F5' }]}>
-                                <Lock size={18} color={Colors.textSecondary} />
+                        {/* 3. GUARDIAN INFORMATION */}
+                        {(student?.parentName && student.parentName !== 'N/A') && (
+                            <View style={styles.profileSection}>
+                                <Text style={styles.sectionTitle}>Guardian Details</Text>
+                                <View style={styles.card}>
+                                    <ProfileItem icon={User} label="Guardian Name" value={student?.parentName} color="#F97316" />
+                                    <ProfileItem icon={Phone} label="Guardian Contact" value={student?.parentContact} color="#EF4444" />
+                                </View>
                             </View>
-                            <Text style={styles.settingLabel}>Change Password</Text>
-                            <ChevronRight size={18} color={Colors.textLight} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.settingRow}>
-                            <View style={[styles.settingIcon, { backgroundColor: '#F5F5F5' }]}>
-                                <User2 size={18} color={Colors.textSecondary} />
+                        )}
+
+                        {/* 4. HOSTEL ALLOCATION */}
+                        <View style={styles.profileSection}>
+                            <Text style={styles.sectionTitle}>Hostel Allocation</Text>
+                            <View style={styles.card}>
+                                <ProfileItem icon={Building2} label="Hostel Name" value={student?.hostelName} color="#00897B" />
+                                <ProfileItem icon={Key} label="Room & Bed" value={student?.roomNo !== 'N/A' ? `Room ${student?.roomNo} - Bed ${student?.bedNumber}` : 'Not Allocated'} color="#C62828" />
+                                <ProfileItem icon={MapPin} label="Floor Number" value={student?.floor ? `${student?.floor} Floor` : 'N/A'} color="#455A64" />
                             </View>
-                            <Text style={styles.settingLabel}>Update Contact Info</Text>
-                            <ChevronRight size={18} color={Colors.textLight} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                        </View>
+                    </>
+                )}
 
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
                     <LogOut size={20} color={Colors.error} />
@@ -939,4 +978,134 @@ const styles = StyleSheet.create({
     typeSelectionTextActive: {
         color: Colors.white,
     },
+    headerPill: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerPillText: {
+        fontSize: 11,
+        fontWeight: '700' as const,
+        color: Colors.white,
+        letterSpacing: 0.5,
+    },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+        paddingHorizontal: 4,
+    },
+    editBtnSmall: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: Colors.primaryGhost,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    editBtnSmallText: {
+        fontSize: 12,
+        fontWeight: '700' as const,
+        color: Colors.primary,
+    },
+    documentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
+    },
+    documentRowLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        flex: 1,
+    },
+    documentRowTitle: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        color: Colors.text,
+        flex: 1,
+    },
+    documentDownloadBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        backgroundColor: Colors.primaryGhost,
+        borderRadius: 12,
+    },
+    documentDownloadBtnText: {
+        fontSize: 12,
+        fontWeight: '700' as const,
+        color: Colors.primary,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: Colors.white,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        height: '80%',
+        shadowColor: Colors.black,
+        shadowOffset: { width: 0, height: -10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.border,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '800' as const,
+        color: Colors.text,
+    },
+    modalCloseBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F1F5F9',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalScroll: {
+        padding: 24,
+    },
+    modalFooter: {
+        padding: 24,
+        borderTopWidth: 1,
+        borderTopColor: Colors.border,
+        backgroundColor: Colors.white,
+    },
+    readOnlyNote: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#F3F4F6',
+        padding: 12,
+        borderRadius: 12,
+        marginTop: 8,
+    },
+    readOnlyNoteText: {
+        flex: 1,
+        fontSize: 12,
+        color: Colors.textLight,
+        lineHeight: 18,
+    }
 });

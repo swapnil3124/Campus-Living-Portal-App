@@ -24,6 +24,7 @@ import {
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
+import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 
 const DEPARTMENTS = [
@@ -50,6 +51,7 @@ export default function MeritListSettingsScreen() {
         generateMeritList,
         isLoading
     } = useAdmissionStore();
+    const { token } = useAuth();
 
     const [deptSeats, setDeptSeats] = useState<Record<string, string>>({});
     const [catPercentages, setCatPercentages] = useState<Record<string, string>>({});
@@ -103,7 +105,7 @@ export default function MeritListSettingsScreen() {
         const success = await updateMeritListSettings({
             departmentSeats,
             categoryPercentages,
-        });
+        }, token!);
 
         if (success) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -143,7 +145,7 @@ export default function MeritListSettingsScreen() {
     };
 
     const processGeneration = async () => {
-        const result = await generateMeritList();
+        const result = await generateMeritList(token!);
         if (result.success) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             // Navigate to results page after successful generation

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -7,7 +7,9 @@ import {
     Animated,
     TouchableOpacity,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -29,6 +31,7 @@ import {
     ShieldCheck,
     LogOut,
     Bell,
+    Scan,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -36,9 +39,13 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdmissionStore } from '@/store/admission-store';
 
+import { API_URL } from '@/constants/config';
+import MessManagementScreen from '../../admin/mess';
+
 const dashboardItems = [
     { key: 'profile', label: 'My Profile', icon: UserCircle, color: '#1565C0', bg: '#E3F2FD', route: '/student/profile' },
     { key: 'complaints', label: 'Complaints', icon: MessageSquare, color: '#E65100', bg: '#FFF3E0', route: '/student/complaints' },
+    { key: 'notices', label: 'Notices', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/student/notices' },
     { key: 'mess', label: 'Mess', icon: UtensilsCrossed, color: '#2E7D32', bg: '#E8F5E9', route: '/student/mess' },
     { key: 'room', label: 'Room Info', icon: BedDouble, color: '#6A1B9A', bg: '#F3E5F5', route: '/student/room' },
     { key: 'leave', label: 'Leave', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/student/leave' },
@@ -58,6 +65,7 @@ const adminDashboardItems = [
     { key: 'emergency', label: 'Emergency Mgmt', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/admin/emergency' },
     { key: 'exit', label: 'Hostel Exit Mgmt', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/admin/exit' },
     { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
+    { key: 'rooms-info', label: 'Rooms Info', icon: BedDouble, color: '#039BE5', bg: '#E1F5FE', route: '/admin/rooms-info' },
 ];
 
 const boysRectorDashboardItems = [
@@ -67,6 +75,7 @@ const boysRectorDashboardItems = [
     { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
     { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
     { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
+    { key: 'rooms-info', label: 'Rooms Info', icon: BedDouble, color: '#039BE5', bg: '#E1F5FE', route: '/admin/rooms-info' },
 ];
 
 const girlsRectorDashboardItems = [
@@ -77,6 +86,7 @@ const girlsRectorDashboardItems = [
     { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
     { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
     { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
+    { key: 'rooms-info', label: 'Rooms Info', icon: BedDouble, color: '#039BE5', bg: '#E1F5FE', route: '/admin/rooms-info' },
 ];
 
 const contractorDashboardItems = [
@@ -87,6 +97,7 @@ const contractorDashboardItems = [
 ];
 
 const watchmanDashboardItems = [
+    { key: 'leave-entry', label: 'Leave Entry', icon: Scan, color: Colors.primary, bg: Colors.primaryGhost, route: '/admin/leave-entry' },
     { key: 'exit', label: 'Entry/Exit Logs', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/admin/exit' },
     { key: 'emergency', label: 'Emergency Alerts', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/admin/emergency' },
     { key: 'students', label: 'Student Verifier', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
@@ -192,9 +203,9 @@ function StudentDashboard() {
 
 function StaffDashboard() {
     const router = useRouter();
-    const { role, subRole } = useAuth();
+    const { role, subRole, student } = useAuth();
     const { admissions, fetchAdmissions } = useAdmissionStore();
-    const pendingAdmissions = admissions.filter(a => a.status === 'pending').length;
+    const [openComplaintsCount, setOpenComplaintsCount] = useState(0);
     const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -225,20 +236,54 @@ function StaffDashboard() {
         }
     }, [role]);
 
+    const fetchOpenComplaints = async () => {
+        const hName = typeof subRole === 'string' ? subRole : '';
+        if (!hName) return;
+        
+        try {
+            const h = hName.toLowerCase().trim();
+            const normalized = h === 'shivneri' ? 'Shivneri Hostel' : 
+                             h === 'lenyadri' ? 'Lenyadri Hostel' : 
+                             h === 'bhimashankar' ? 'Bhimashankar Hostel' : 
+                             h === 'shwetambara' ? 'Shwetambara Hostel' : 
+                             h === 'saraswati' ? 'Saraswati Hostel' : hName;
+
+            const response = await fetch(`${API_URL}/complaints/warden?hostelName=${encodeURIComponent(normalized)}`);
+            const text = await response.text();
+            try {
+                const data = JSON.parse(text);
+                if (Array.isArray(data)) {
+                    const pending = data.filter(c => c.status === 'pending').length;
+                    setOpenComplaintsCount(pending);
+                }
+            } catch (e) {
+                console.error('Invalid JSON in dashboard:', text.substring(0, 100));
+            }
+        } catch (error) {
+            console.error('Error fetching complaint count:', error);
+        }
+    };
+
     useEffect(() => {
         if ((role === 'rector' && isGirlsHostel) || (role === 'admin' && !isGirlsHostel)) {
             fetchAdmissions();
         }
+        fetchOpenComplaints();
         Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
         cardAnims.forEach((anim, i) => {
             Animated.timing(anim, { toValue: 1, duration: 400, delay: 200 + i * 80, useNativeDriver: true }).start();
         });
     }, [role, items, isGirlsHostel]);
 
-    const handlePressIn = (i: number) => Animated.spring(scaleAnims[i], { toValue: 0.92, useNativeDriver: true }).start();
-    const handlePressOut = (i: number) => Animated.spring(scaleAnims[i], { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    const handlePressIn = (i: number) => {
+        if (scaleAnims[i]) Animated.spring(scaleAnims[i], { toValue: 0.92, useNativeDriver: true }).start();
+    };
+    const handlePressOut = (i: number) => {
+        if (scaleAnims[i]) Animated.spring(scaleAnims[i], { toValue: 1, friction: 3, useNativeDriver: true }).start();
+    };
 
     const Icon = roleInfo.icon;
+    const pendingAdmissionsCount = admissions?.filter(a => a.status === 'pending').length || 0;
 
     return (
         <View style={styles.container}>
@@ -271,11 +316,11 @@ function StaffDashboard() {
                 {((role === 'rector' && isGirlsHostel) || (role === 'admin' && !isGirlsHostel)) && (
                     <View style={styles.adminStatsRow}>
                         <View style={styles.adminStatCard}>
-                            <Text style={styles.adminStatVal}>{pendingAdmissions}</Text>
+                            <Text style={styles.adminStatVal}>{pendingAdmissionsCount}</Text>
                             <Text style={styles.adminStatLab}>Pending Admissions</Text>
                         </View>
                         <View style={styles.adminStatCard}>
-                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
+                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>{openComplaintsCount}</Text>
                             <Text style={styles.adminStatLab}>Open Complaints</Text>
                         </View>
                     </View>
@@ -284,7 +329,7 @@ function StaffDashboard() {
                 {(role === 'admin' && isGirlsHostel) && (
                     <View style={styles.adminStatsRow}>
                         <View style={styles.adminStatCard}>
-                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
+                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>{openComplaintsCount}</Text>
                             <Text style={styles.adminStatLab}>Open Complaints</Text>
                         </View>
                     </View>
@@ -293,7 +338,7 @@ function StaffDashboard() {
                 {role === 'rector' && !isGirlsHostel && (
                     <View style={styles.adminStatsRow}>
                         <View style={styles.adminStatCard}>
-                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>5</Text>
+                            <Text style={[styles.adminStatVal, { color: Colors.error }]}>{openComplaintsCount}</Text>
                             <Text style={styles.adminStatLab}>Open Complaints</Text>
                         </View>
                     </View>
@@ -385,6 +430,7 @@ export default function DashboardScreen() {
 
     if (!isLoggedIn) return <LockedDashboard />;
     if (role === 'student') return <StudentDashboard />;
+    if (role === 'contractor') return <MessManagementScreen />;
     return <StaffDashboard />;
 }
 

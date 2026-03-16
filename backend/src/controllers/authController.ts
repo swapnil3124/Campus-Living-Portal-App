@@ -57,6 +57,36 @@ export const initializeStaff = async () => {
                 role: 'admin' as const,
                 subRole: 'saraswati' as const,
                 name: 'Saraswati Hostel Warden'
+            },
+            // Watchman Accounts
+            {
+                staffId: 'WATCHBOYS1051',
+                password: 'Watch@Boys1051',
+                role: 'watchman' as const,
+                subRole: 'boys' as const,
+                name: 'Boys Hostel Watchman'
+            },
+            {
+                staffId: 'WATCHGIRLS1051',
+                password: 'Watch@Girls1051',
+                role: 'watchman' as const,
+                subRole: 'girls' as const,
+                name: 'Girls Hostel Watchman'
+            },
+            // Mess Contractor Accounts
+            {
+                staffId: 'MESSBOYS1051',
+                password: 'Mess@Boys1051',
+                role: 'contractor' as const,
+                subRole: 'boys' as const,
+                name: 'Boys Mess Contractor'
+            },
+            {
+                staffId: 'MESSGIRLS1051',
+                password: 'Mess@Girls1051',
+                role: 'contractor' as const,
+                subRole: 'girls' as const,
+                name: 'Girls Mess Contractor'
             }
         ];
 
@@ -104,7 +134,7 @@ export const staffLogin = async (req: Request, res: Response) => {
         res.json({
             token,
             user: {
-                id: staff._id,
+                id: staff._id.toString(),
                 staffId: staff.staffId,
                 role: staff.role,
                 subRole: staff.subRole,

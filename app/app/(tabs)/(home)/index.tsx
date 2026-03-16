@@ -11,9 +11,14 @@ import {
     ImageBackground,
     Modal,
     Easing,
+    Linking,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import {
     Building2,
@@ -22,11 +27,73 @@ import {
     ClipboardList,
     BellRing,
     X,
+    Download,
+    Paperclip,
+    FileText,
+    Calendar,
+    AlertCircle,
+    Info,
+    AlertTriangle,
+    User as UserIcon,
 } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
-import { hostels, notices } from '@/mocks/data';
+import { hostels } from '@/mocks/data';
+import { Notice } from '@/constants/types';
+
+const buildPdfHtml = (base64: string) => {
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; min-height: 100%; background: #1e1e2e; overflow-x: hidden; }
+    #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; color: #a0aec0; font-family: -apple-system, sans-serif; font-size: 15px; gap: 14px; }
+    .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.15); border-top-color: #667eea; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #container { display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 6px; }
+    .page-wrapper { width: 100%; position: relative; background: white; }
+    canvas { display: block; width: 100% !important; height: auto !important; }
+    .page-num { position: absolute; bottom: 6px; right: 10px; background: rgba(0,0,0,0.45); color: white; font-size: 11px; padding: 2px 7px; border-radius: 999px; font-family: -apple-system, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="loading"><div class="spinner"></div><span>Loading PDF…</span></div>
+  <div id="container"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    var pdfData = Uint8Array.from(atob('${base64}'), c => c.charCodeAt(0));
+    pdfjsLib.getDocument({ data: pdfData }).promise.then(function(pdf) {
+      document.getElementById('loading').style.display = 'none';
+      var container = document.getElementById('container');
+      function renderPage(num) {
+        pdf.getPage(num).then(function(page) {
+          var vp0 = page.getViewport({ scale: 1 });
+          var scale = (window.innerWidth * window.devicePixelRatio) / vp0.width;
+          var viewport = page.getViewport({ scale: scale });
+          var wrapper = document.createElement('div');
+          wrapper.className = 'page-wrapper';
+          var canvas = document.createElement('canvas');
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          var label = document.createElement('div');
+          label.className = 'page-num'; label.textContent = num + ' / ' + pdf.numPages;
+          wrapper.appendChild(canvas); wrapper.appendChild(label);
+          container.appendChild(wrapper);
+          page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport });
+          if (num < pdf.numPages) renderPage(num + 1);
+        });
+      }
+      renderPage(1);
+    });
+  </script>
+</body>
+</html>`;
+};
 
 const { width } = Dimensions.get('window');
 
@@ -43,18 +110,20 @@ const hostelImages: Record<string, any> = {
 
 import { useAdmissionStore } from '@/store/admission-store';
 import { useAnnouncementStore, Announcement } from '@/store/announcement-store';
+import { API_URL } from '@/constants/config';
 
 export default function HomeScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { regConfig, fetchRegConfig } = useAdmissionStore();
-    const { activeAnnouncements, fetchActiveAnnouncements } = useAnnouncementStore();
+    const { announcements, activeAnnouncements, fetchActiveAnnouncements, fetchAnnouncements } = useAnnouncementStore();
     const [modalVisible, setModalVisible] = useState(false);
+    const [allAnnModalVisible, setAllAnnModalVisible] = useState(false);
     const [selectedAnn, setSelectedAnn] = useState<Announcement | null>(null);
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     // Marquee Animation
-    const marqueeAnim = useRef(new Animated.Value(width)).current;
+    const marqueeAnim = useRef(new Animated.Value(0)).current;
     const [textWidth, setTextWidth] = useState(0);
     const slideAnim = useRef(new Animated.Value(30)).current;
     const cardAnims = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
@@ -64,6 +133,8 @@ export default function HomeScreen() {
     useEffect(() => {
         fetchRegConfig();
         fetchActiveAnnouncements();
+        fetchAnnouncements();
+        fetchPublicNotices();
         Animated.parallel([
             Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
             Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
@@ -88,20 +159,14 @@ export default function HomeScreen() {
 
     useEffect(() => {
         if (textWidth > 0) {
+            marqueeAnim.setValue(0);
             Animated.loop(
-                Animated.sequence([
-                    Animated.timing(marqueeAnim, {
-                        toValue: -textWidth,
-                        duration: (textWidth + width) * 15,
-                        easing: Easing.linear,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(marqueeAnim, {
-                        toValue: width,
-                        duration: 0,
-                        useNativeDriver: true,
-                    }),
-                ])
+                Animated.timing(marqueeAnim, {
+                    toValue: -textWidth,
+                    duration: textWidth * 18, // Adjust speed as needed
+                    easing: Easing.linear,
+                    useNativeDriver: true,
+                })
             ).start();
         }
     }, [textWidth, activeAnnouncements]);
@@ -142,7 +207,104 @@ export default function HomeScreen() {
         }).start();
     };
 
-    const latestNotices = notices.slice(0, 3);
+    const [publicNotices, setPublicNotices] = useState<Notice[]>([]);
+
+    // Notice Detail & Viewer states
+    const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
+    const [noticeDetailVisible, setNoticeDetailVisible] = useState(false);
+    const [viewerVisible, setViewerVisible] = useState(false);
+    const [viewerUri, setViewerUri] = useState('');
+    const [viewerName, setViewerName] = useState('');
+    const [viewerType, setViewerType] = useState<'image' | 'pdf'>('image');
+    const [pdfBase64, setPdfBase64] = useState('');
+
+    const fetchPublicNotices = async () => {
+        try {
+            const response = await fetch(`${API_URL}/notices/public`);
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                const mappedData = data.map((n: any) => ({
+                    id: n._id,
+                    title: n.title,
+                    description: n.description,
+                    priority: n.priority as any,
+                    date: new Date(n.createdAt).toLocaleDateString(),
+                    issuedBy: n.issuedBy,
+                    category: n.category || 'General',
+                    hostelName: n.hostelName || 'General',
+                    fileUrl: n.fileUrl,
+                    fileName: n.fileName,
+                    // Store technical date for 'NEW' calculation
+                    createdAt: n.createdAt 
+                }));
+                setPublicNotices(mappedData.slice(0, 3));
+            }
+        } catch (error) {
+            console.error('Error fetching public notices for home:', error);
+        }
+    };
+
+    const handleOpenNoticeDetail = (notice: Notice) => {
+        setSelectedNotice(notice);
+        setNoticeDetailVisible(true);
+    };
+
+    const handleViewFile = async (url: string, name: string) => {
+        const isPdf = name.toLowerCase().endsWith('.pdf');
+        const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(name) || /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+        
+        const serverBase = API_URL.replace('/api', '');
+        const fullUrl = url.startsWith('http') ? url : `${serverBase}${url}`;
+
+        setViewerName(name);
+
+        if (isPdf) {
+            setViewerType('pdf');
+            try {
+                const response = await fetch(fullUrl);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
+                reader.onloadend = () => {
+                    const base64data = (reader.result as string).split(',')[1];
+                    setPdfBase64(base64data);
+                    setViewerVisible(true);
+                };
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                Alert.alert('Error', 'Failed to load PDF file');
+            }
+        } else if (isImg) {
+            setViewerType('image');
+            setViewerUri(fullUrl);
+            setViewerVisible(true);
+        } else {
+            Alert.alert('Notice', 'This file type cannot be previewed in-app. Please download it to view.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Download', onPress: () => handleDownload(url, name) }
+            ]);
+        }
+    };
+
+    const handleDownload = async (url: string, filename: string) => {
+        try {
+            const serverBase = API_URL.replace('/api', '');
+            const fullUrl = url.startsWith('http') ? url : `${serverBase}${url}`;
+            const fileUri = FileSystem.documentDirectory + filename;
+            const downloadResumable = FileSystem.createDownloadResumable(fullUrl, fileUri);
+            const { uri } = await downloadResumable.downloadAsync() as { uri: string };
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                Alert.alert('Success', 'File downloaded to: ' + uri);
+            }
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Failed to download file');
+        }
+    };
+
 
     return (
         <View style={styles.container}>
@@ -200,21 +362,33 @@ export default function HomeScreen() {
                 {/* Announcement Bar */}
                 {activeAnnouncements.length > 0 && (
                     <View style={styles.announcementBar}>
-                        <View style={styles.announcementBadge}>
+                        <TouchableOpacity
+                            style={styles.announcementBadge}
+                            onPress={() => setAllAnnModalVisible(true)}
+                            activeOpacity={0.8}
+                        >
                             <Text style={styles.announcementBadgeText}>Announcements</Text>
-                            <BellRing size={14} color={Colors.white} style={{ marginLeft: 4 }} />
-                        </View>
+                            <BellRing size={14} color={Colors.white} style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
                         <View style={styles.marqueeContainer}>
                             <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: marqueeAnim }] }}>
                                 <View onLayout={(e) => setTextWidth(e.nativeEvent.layout.width)}>
                                     <View style={{ flexDirection: 'row' }}>
                                         {activeAnnouncements.map((ann, idx) => (
-                                            <TouchableOpacity key={idx} onPress={() => handleAnnouncementClick(ann)} style={styles.marqueeItem}>
+                                            <TouchableOpacity key={`orig-${idx}`} onPress={() => handleAnnouncementClick(ann)} style={styles.marqueeItem}>
                                                 <Text style={styles.marqueeText}>{ann.message}</Text>
-                                                {idx < activeAnnouncements.length - 1 && <Text style={styles.marqueeDivider}> • </Text>}
+                                                <Text style={styles.marqueeDivider}>   •   </Text>
                                             </TouchableOpacity>
                                         ))}
                                     </View>
+                                </View>
+                                <View style={{ flexDirection: 'row' }}>
+                                    {activeAnnouncements.map((ann, idx) => (
+                                        <TouchableOpacity key={`dup-${idx}`} onPress={() => handleAnnouncementClick(ann)} style={styles.marqueeItem}>
+                                            <Text style={styles.marqueeText}>{ann.message}</Text>
+                                            <Text style={styles.marqueeDivider}>   •   </Text>
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
                             </Animated.View>
                         </View>
@@ -334,8 +508,13 @@ export default function HomeScreen() {
                                 <ChevronRight size={14} color={Colors.primary} />
                             </TouchableOpacity>
                         </View>
-                        {latestNotices.map((notice) => (
-                            <View key={notice.id} style={styles.noticePreview}>
+                        {publicNotices.map((notice) => (
+                            <TouchableOpacity 
+                                key={notice.id} 
+                                style={styles.noticePreview}
+                                onPress={() => handleOpenNoticeDetail(notice)}
+                                activeOpacity={0.7}
+                            >
                                 <View style={styles.noticeLeft}>
                                     <View
                                         style={[
@@ -347,15 +526,20 @@ export default function HomeScreen() {
                                     />
                                     <View style={styles.noticeTextWrap}>
                                         <Text style={styles.noticeTitle} numberOfLines={1}>{notice.title}</Text>
-                                        <Text style={styles.noticeDate}>{notice.date} • {notice.issuedBy}</Text>
+                                        <Text style={styles.noticeDate}>
+                                            {notice.date} • {notice.issuedBy}
+                                        </Text>
                                     </View>
                                 </View>
-                                {notice.isNew && (
-                                    <View style={styles.newBadge}>
-                                        <Text style={styles.newBadgeText}>NEW</Text>
-                                    </View>
-                                )}
-                            </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    {notice.fileUrl && <Paperclip size={14} color={Colors.primary} />}
+                                    {(new Date().getTime() - new Date(notice.createdAt || 0).getTime()) < 2 * 24 * 60 * 60 * 1000 && (
+                                        <View style={styles.newBadge}>
+                                            <Text style={styles.newBadgeText}>NEW</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </TouchableOpacity>
                         ))}
                     </Animated.View>
 
@@ -413,7 +597,169 @@ export default function HomeScreen() {
                             <Text style={styles.modalMsg}>{selectedAnn?.message}</Text>
                             {!!selectedAnn?.details && <Text style={styles.modalDetails}>{selectedAnn.details}</Text>}
                             <Text style={styles.modalDate}>Valid from: {selectedAnn?.startDate ? new Date(selectedAnn.startDate).toLocaleDateString() : ''}</Text>
+                            {selectedAnn?.fileUrl && (
+                                <TouchableOpacity
+                                    style={styles.downloadBtn}
+                                    onPress={() => {
+                                        const url = API_URL.replace('/api', '') + selectedAnn.fileUrl;
+                                        Linking.openURL(url);
+                                    }}
+                                >
+                                    <Download size={18} color={Colors.white} />
+                                    <Text style={styles.downloadBtnText}>Download Attachment</Text>
+                                </TouchableOpacity>
+                            )}
                         </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* All Announcements Modal */}
+            <Modal visible={allAnnModalVisible} transparent={true} animationType="slide" onRequestClose={() => setAllAnnModalVisible(false)}>
+                <View style={styles.fullModalOverlay}>
+                    <View style={styles.fullModalContent}>
+                        <View style={styles.fullModalHeader}>
+                            <Text style={styles.modalTitle}>All Announcements</Text>
+                            <TouchableOpacity onPress={() => setAllAnnModalVisible(false)} style={styles.closeBtn}>
+                                <X size={24} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={styles.fullModalBody} showsVerticalScrollIndicator={false}>
+                            {announcements.length === 0 ? (
+                                <Text style={styles.modalDetails}>No announcements available.</Text>
+                            ) : (
+                                announcements.map((ann, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={styles.annCard}
+                                        onPress={() => {
+                                            setAllAnnModalVisible(false);
+                                            handleAnnouncementClick(ann);
+                                        }}
+                                    >
+                                        <View style={styles.annCardHeader}>
+                                            <Text style={styles.annCardTitle}>{ann.message}</Text>
+                                            {ann.isActive && <View style={styles.activeDot} />}
+                                        </View>
+                                        <Text style={styles.annCardDate}>{new Date(ann.createdAt || ann.startDate).toLocaleDateString()}</Text>
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+            {/* Notice Detail Modal */}
+            <Modal
+                visible={noticeDetailVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setNoticeDetailVisible(false)}
+            >
+                <BlurView intensity={20} style={styles.noticeModalOverlay}>
+                    <View style={styles.noticeModalContent}>
+                        <View style={styles.noticeModalHeader}>
+                            <Text style={styles.modalTitle}>Notice Details</Text>
+                            <TouchableOpacity onPress={() => setNoticeDetailVisible(false)} style={styles.closeBtn}>
+                                <X size={24} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                            {selectedNotice && (
+                                <View>
+                                    <View style={styles.detailCard}>
+                                        <Text style={styles.detailTitle}>{selectedNotice.title}</Text>
+                                        
+                                        <View style={styles.detailMetaRow}>
+                                            <View style={styles.detailMetaItem}>
+                                                <Calendar size={14} color={Colors.textLight} />
+                                                <Text style={styles.detailMetaText}>{selectedNotice.date}</Text>
+                                            </View>
+                                            <View style={styles.detailMetaItem}>
+                                                <UserIcon size={14} color={Colors.textLight} />
+                                                <Text style={styles.detailMetaText}>{selectedNotice.issuedBy}</Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.divider} />
+                                        
+                                        <Text style={styles.detailDescription}>{selectedNotice.description}</Text>
+
+                                        {selectedNotice.fileUrl && (
+                                            <View style={styles.attachmentSection}>
+                                                <Text style={styles.attachmentLabel}>Attachment</Text>
+                                                <TouchableOpacity 
+                                                    style={styles.attachmentCard}
+                                                    onPress={() => handleViewFile(selectedNotice.fileUrl!, selectedNotice.fileName!)}
+                                                >
+                                                    <View style={styles.attachmentIcon}>
+                                                        {selectedNotice.fileName?.toLowerCase().endsWith('.pdf') ? (
+                                                            <FileText size={24} color={Colors.error} />
+                                                        ) : (
+                                                            <Paperclip size={24} color={Colors.primary} />
+                                                        )}
+                                                    </View>
+                                                    <View style={styles.attachmentInfo}>
+                                                        <Text style={styles.attachmentName} numberOfLines={1}>
+                                                            {selectedNotice.fileName}
+                                                        </Text>
+                                                        <Text style={styles.attachmentAction}>Tap to view</Text>
+                                                    </View>
+                                                    <TouchableOpacity 
+                                                        onPress={() => handleDownload(selectedNotice.fileUrl!, selectedNotice.fileName!)}
+                                                        style={styles.downloadIcon}
+                                                    >
+                                                        <Download size={20} color={Colors.textLight} />
+                                                    </TouchableOpacity>
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
+                                    </View>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </BlurView>
+            </Modal>
+
+            {/* Viewer Modal */}
+            <Modal
+                visible={viewerVisible}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={() => setViewerVisible(false)}
+            >
+                <View style={[styles.viewerOverlay, { paddingTop: insets.top }]}>
+                    <View style={styles.viewerHeader}>
+                        <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+                            <X size={26} color={Colors.white} />
+                        </TouchableOpacity>
+                        <Text style={styles.viewerTitle} numberOfLines={1}>{viewerName}</Text>
+                        <TouchableOpacity onPress={() => handleDownload(viewerUri, viewerName)} style={styles.viewerCloseBtn}>
+                            <Download size={24} color={Colors.white} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.viewerContent}>
+                        {viewerType === 'image' ? (
+                            <Image
+                                source={{ uri: viewerUri }}
+                                style={styles.fullImage}
+                                contentFit="contain"
+                            />
+                        ) : (
+                            <WebView
+                                originWhitelist={['*']}
+                                source={{ html: buildPdfHtml(pdfBase64) }}
+                                style={styles.pdfViewer}
+                                scrollEnabled={true}
+                                bounces={false}
+                                allowFileAccess={true}
+                                scalesPageToFit={true}
+                                mixedContentMode="always"
+                            />
+                        )}
                     </View>
                 </View>
             </Modal>
@@ -800,7 +1146,215 @@ const styles = StyleSheet.create({
     },
     modalDate: {
         fontSize: 12,
+        color: Colors.textLight,
+        marginBottom: 8,
+    },
+    downloadBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.primary,
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 16,
+        gap: 8,
+    },
+    downloadBtnText: {
+        color: Colors.white,
+        fontWeight: '600',
+        fontSize: 15,
+    },
+    fullModalOverlay: {
+        flex: 1,
+        backgroundColor: Colors.background,
+        paddingTop: 50,
+    },
+    fullModalContent: {
+        flex: 1,
+        backgroundColor: Colors.white,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+    },
+    fullModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    closeBtn: {
+        padding: 4,
+    },
+    fullModalBody: {
+        flex: 1,
+    },
+    annCard: {
+        backgroundColor: Colors.background,
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: Colors.primary,
+    },
+    annCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 6,
+    },
+    annCardTitle: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        color: Colors.text,
+        lineHeight: 20,
+        marginRight: 8,
+    },
+    activeDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: Colors.success,
+        marginTop: 6,
+    },
+    annCardDate: {
+        fontSize: 12,
+        color: Colors.textLight,
+    },
+    // Notice Detail & Viewer Styles
+    noticeModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    noticeModalContent: {
+        backgroundColor: Colors.white,
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        height: '85%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 20,
+    },
+    noticeModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.border,
+    },
+    detailCard: {
+        gap: 16,
+    },
+    detailTitle: {
+        fontSize: 22,
+        fontWeight: '800' as const,
+        color: Colors.text,
+        lineHeight: 30,
+    },
+    detailMetaRow: {
+        flexDirection: 'row',
+        gap: 20,
+    },
+    detailMetaItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    detailMetaText: {
+        fontSize: 13,
+        color: Colors.textLight,
+        fontWeight: '500' as const,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: Colors.border,
+    },
+    detailDescription: {
+        fontSize: 15,
+        lineHeight: 24,
+        color: Colors.textSecondary,
+    },
+    attachmentSection: {
+        marginTop: 10,
+        gap: 12,
+    },
+    attachmentLabel: {
+        fontSize: 14,
+        fontWeight: '700' as const,
+        color: Colors.text,
+    },
+    attachmentCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 14,
+        backgroundColor: '#F8FAFC',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        gap: 12,
+    },
+    attachmentIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        backgroundColor: Colors.white,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: Colors.border,
+    },
+    attachmentInfo: {
+        flex: 1,
+    },
+    attachmentName: {
+        fontSize: 14,
+        fontWeight: '600' as const,
+        color: Colors.text,
+        marginBottom: 2,
+    },
+    attachmentAction: {
+        fontSize: 12,
         color: Colors.primary,
-        fontWeight: '500',
+        fontWeight: '500' as const,
+    },
+    downloadIcon: {
+        padding: 8,
+    },
+    viewerOverlay: {
+        flex: 1,
+        backgroundColor: '#000',
+    },
+    viewerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    viewerCloseBtn: {
+        padding: 8,
+    },
+    viewerTitle: {
+        flex: 1,
+        color: Colors.white,
+        fontSize: 16,
+        fontWeight: '700' as const,
+        textAlign: 'center',
+    },
+    viewerContent: {
+        flex: 1,
+        backgroundColor: '#1e1e2e',
+    },
+    fullImage: {
+        flex: 1,
+    },
+    pdfViewer: {
+        flex: 1,
+        backgroundColor: '#1e1e2e',
     },
 });

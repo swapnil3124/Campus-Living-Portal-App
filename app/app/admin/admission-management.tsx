@@ -71,7 +71,7 @@ const CATEGORIES = [
 export default function AdmissionManagementScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const { hostelName } = useAuth();
+    const { hostelName, token } = useAuth();
     const { admissions, updateAdmission, fetchAdmissions, getAdmissionById, isLoading, regConfig } = useAdmissionStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAdmission, setSelectedAdmission] = useState<Admission | null>(null);
@@ -88,8 +88,10 @@ export default function AdmissionManagementScreen() {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
 
     React.useEffect(() => {
-        fetchAdmissions();
-    }, []);
+        if (token) {
+            fetchAdmissions(token);
+        }
+    }, [token]);
 
     // Document Viewer State
     const [viewerVisible, setViewerVisible] = useState(false);
@@ -158,8 +160,9 @@ export default function AdmissionManagementScreen() {
     };
 
     const onRefresh = async () => {
+        if (!token) return;
         setIsRefreshing(true);
-        await fetchAdmissions();
+        await fetchAdmissions(token);
         setIsRefreshing(false);
     };
 
@@ -168,18 +171,21 @@ export default function AdmissionManagementScreen() {
         const hNameRaw = hostelName?.toLowerCase() || '';
 
         // Apply Warden-specific filtering constraints
-        if (hNameRaw === 'shivneri') {
+        if (hNameRaw.includes('shivneri')) {
             // Shivneri Warden manages 1st Year Male students
             result = result.filter(adm => adm.year === '1st' && adm.gender?.toLowerCase() === 'male');
-        } else if (hNameRaw === 'lenyadri') {
+        } else if (hNameRaw.includes('lenyadri')) {
             // Lenyadri Warden manages 2nd Year Male students
-            result = result.filter(adm => adm.year === '2nd' && adm.gender?.toLowerCase() === 'male');
-        } else if (hNameRaw === 'bhimashankar') {
+            result = result.filter(adm => (adm.year === '2nd' || adm.year?.toLowerCase()?.includes('second')) && adm.gender?.toLowerCase() === 'male');
+        } else if (hNameRaw.includes('bhimashankar')) {
             // Bhimashankar Warden manages 3rd Year Male students
-            result = result.filter(adm => adm.year === '3rd' && adm.gender?.toLowerCase() === 'male');
-        } else if (hNameRaw === 'saraswati' || hNameRaw === 'shwetamber' || hNameRaw === 'shwetambara' || hNameRaw === 'girls') {
-            // Girls' hostels see ALL female registrations
-            result = result.filter(adm => adm.gender?.toLowerCase() === 'female');
+            result = result.filter(adm => (adm.year === '3rd' || adm.year?.toLowerCase()?.includes('third')) && adm.gender?.toLowerCase() === 'male');
+        } else if (hNameRaw.includes('saraswati')) {
+            // Saraswati Warden manages 1st Year Female students
+            result = result.filter(adm => adm.year === '1st' && adm.gender?.toLowerCase() === 'female');
+        } else if (hNameRaw.includes('shwetamber') || hNameRaw.includes('shwetambara')) {
+            // Shwetambara Warden manages 2nd and 3rd Year Female students
+            result = result.filter(adm => ['2nd', '3rd'].includes(adm.year) && adm.gender?.toLowerCase() === 'female');
         }
         return result;
     }, [admissions, hostelName]);
@@ -253,7 +259,7 @@ export default function AdmissionManagementScreen() {
                     text: newStatus === 'accepted' ? 'Approve' : newStatus === 'rejected' ? 'Reject' : 'Reset to Pending',
                     style: newStatus === 'rejected' ? 'destructive' : 'default',
                     onPress: async () => {
-                        const success = await updateAdmission(id, { status: newStatus });
+                        const success = await updateAdmission(id, { status: newStatus }, token || undefined);
                         if (success) {
                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                             if (newStatus === 'rejected') {
@@ -411,7 +417,7 @@ export default function AdmissionManagementScreen() {
                                     setSelectedAdmission(adm);
                                     setIsEditModalVisible(true);
                                     setIsDetailLoading(true);
-                                    const fullData = await getAdmissionById(adm.id);
+                                    const fullData = await getAdmissionById(adm.id, token || undefined);
                                     if (fullData) setSelectedAdmission(fullData);
                                     setIsDetailLoading(false);
                                 }}

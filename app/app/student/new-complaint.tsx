@@ -7,32 +7,109 @@ import {
     TextInput,
     TouchableOpacity,
     Alert,
+    ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Send } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { Send, Image as ImageIcon, X } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import Constants from 'expo-constants';
 import Colors from '@/constants/colors';
+import { useAuth } from '@/contexts/AuthContext';
 import { complaintTypes } from '@/mocks/data';
+
+import { API_URL } from '@/constants/config';
 
 export default function NewComplaintScreen() {
     const router = useRouter();
+    const { student } = useAuth();
     const [type, setType] = useState<string>('');
     const [description, setDescription] = useState<string>('');
     const [priority, setPriority] = useState<string>('');
+    const [selectedImage, setSelectedImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const priorities = ['Low', 'Medium', 'High'];
 
-    const handleSubmit = useCallback(() => {
+    const handleSubmit = async () => {
         if (!type || !description.trim() || !priority) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Success', 'Complaint submitted successfully!', [
-            { text: 'OK', onPress: () => router.back() },
-        ]);
-    }, [type, description, priority, router]);
+
+        const studentId = student?._id || student?.id;
+        if (!studentId) {
+            Alert.alert('Error', 'Student session not found. Please re-login.');
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            const formData = new FormData();
+            formData.append('studentId', studentId);
+            formData.append('type', type);
+            formData.append('priority', priority.toLowerCase());
+            formData.append('description', description.trim());
+
+            if (selectedImage) {
+                const uri = Platform.OS === 'android' ? selectedImage.uri : selectedImage.uri.replace('file://', '');
+                const filename = uri.split('/').pop() || 'complaint_img.jpg';
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : `image`;
+                
+                formData.append('image', {
+                    uri,
+                    name: filename,
+                    type,
+                } as any);
+            }
+
+            const response = await fetch(`${API_URL}/complaints`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('Success', 'Complaint submitted successfully!', [
+                    { text: 'OK', onPress: () => router.back() },
+                ]);
+            } else {
+                Alert.alert('Error', data.error + (data.details ? `: ${data.details}` : '') || 'Failed to submit complaint');
+            }
+        } catch (error) {
+            console.error('Error submitting complaint:', error);
+            Alert.alert('Error', 'Network error. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const pickImage = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission Denied', 'We need camera roll permissions to upload an image.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: false,
+            quality: 1,
+        });
+
+        if (!result.canceled) {
+            setSelectedImage(result.assets[0]);
+        }
+    };
 
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -81,6 +158,23 @@ export default function NewComplaintScreen() {
                 />
             </View>
 
+            <View style={styles.section}>
+                <Text style={styles.label}>Attachment (Optional)</Text>
+                {selectedImage ? (
+                    <View style={styles.imagePreviewContainer}>
+                        <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
+                        <TouchableOpacity style={styles.removeImageBtn} onPress={() => setSelectedImage(null)}>
+                            <X size={16} color={Colors.white} />
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <TouchableOpacity style={styles.uploadBtn} onPress={pickImage}>
+                        <ImageIcon size={24} color={Colors.primary} />
+                        <Text style={styles.uploadText}>Upload Image</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+
             <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.85}>
                 <LinearGradient
                     colors={[Colors.primary, Colors.primaryDark]}
@@ -88,8 +182,14 @@ export default function NewComplaintScreen() {
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                 >
-                    <Send size={18} color={Colors.white} />
-                    <Text style={styles.submitText}>Submit Complaint</Text>
+                    {isSubmitting ? (
+                        <ActivityIndicator color={Colors.white} />
+                    ) : (
+                        <>
+                            <Send size={18} color={Colors.white} />
+                            <Text style={styles.submitText}>Submit Complaint</Text>
+                        </>
+                    )}
                 </LinearGradient>
             </TouchableOpacity>
         </ScrollView>
@@ -172,5 +272,43 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600' as const,
         color: Colors.white,
+    },
+    uploadBtn: {
+        backgroundColor: Colors.white,
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderColor: Colors.border,
+        borderStyle: 'dashed',
+        padding: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    uploadText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.primary,
+    },
+    imagePreviewContainer: {
+        position: 'relative',
+        borderRadius: 14,
+        overflow: 'hidden',
+        borderWidth: 1.5,
+        borderColor: Colors.border,
+    },
+    imagePreview: {
+        width: '100%',
+        height: 180,
+    },
+    removeImageBtn: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

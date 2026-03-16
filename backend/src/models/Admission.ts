@@ -13,7 +13,13 @@ export interface IAdmission extends Document {
     additionalData: Record<string, any>;
     status: 'pending' | 'verified' | 'accepted' | 'rejected';
     appliedAt: Date;
+    photoUrl?: string;
     studentPassword?: string;
+    isRoomAllocated?: boolean;
+    allocatedHostel?: string;
+    allocatedRoom?: string;
+    allocatedBed?: number;
+    feeStatus?: 'paid' | 'pending' | 'partial';
 }
 
 const AdmissionSchema: Schema = new Schema({
@@ -29,7 +35,13 @@ const AdmissionSchema: Schema = new Schema({
     additionalData: { type: Schema.Types.Mixed, default: {} },
     status: { type: String, enum: ['pending', 'verified', 'accepted', 'rejected'], default: 'pending' },
     appliedAt: { type: Date, default: Date.now },
-    studentPassword: { type: String }
+    photoUrl: { type: String },
+    studentPassword: { type: String },
+    isRoomAllocated: { type: Boolean, default: false },
+    allocatedHostel: { type: String },
+    allocatedRoom: { type: String },
+    allocatedBed: { type: Number },
+    feeStatus: { type: String, enum: ['paid', 'pending', 'partial'], default: 'pending' }
 }, { strict: false });
 
 const Admission = mongoose.models.Admission || mongoose.model<IAdmission>('Admission', AdmissionSchema);

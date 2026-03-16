@@ -2,15 +2,7 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-const getBaseUrl = () => {
-    if (Platform.OS === 'web') return 'http://localhost:5000/api';
-    const debuggerHost = Constants.expoConfig?.hostUri;
-    const machineIp = debuggerHost?.split(':')[0];
-    if (machineIp) return `http://${machineIp}:5000/api`;
-    return Platform.OS === 'android' ? 'http://10.0.2.2:5000/api' : 'http://localhost:5000/api';
-};
-
-const API_URL = getBaseUrl();
+import { API_URL } from '@/constants/config';
 
 export interface Announcement {
     _id?: string;
@@ -20,6 +12,7 @@ export interface Announcement {
     endDate: string;
     isActive: boolean;
     createdBy?: string;
+    fileUrl?: string; // Add file URL for downloading attachments
     createdAt?: string;
 }
 
@@ -42,26 +35,26 @@ export const useAnnouncementStore = create<AnnouncementStore>((set, get) => ({
     error: null,
 
     fetchAnnouncements: async () => {
-        set({ isLoading: true, error: null });
+        if (get().announcements.length === 0) set({ isLoading: true, error: null });
         try {
             const response = await fetch(`${API_URL}/announcements`);
             if (!response.ok) throw new Error('Failed to fetch announcements');
             const data = await response.json();
             set({ announcements: data, isLoading: false });
         } catch (err: any) {
-            set({ error: err.message, isLoading: false });
+            if (get().announcements.length === 0) set({ error: err.message, isLoading: false });
         }
     },
 
     fetchActiveAnnouncements: async () => {
-        set({ isLoading: true, error: null });
+        if (get().activeAnnouncements.length === 0) set({ isLoading: true, error: null });
         try {
             const response = await fetch(`${API_URL}/announcements/active`);
             if (!response.ok) throw new Error('Failed to fetch active announcements');
             const data = await response.json();
             set({ activeAnnouncements: data, isLoading: false });
         } catch (err: any) {
-            set({ error: err.message, isLoading: false });
+            if (get().activeAnnouncements.length === 0) set({ error: err.message, isLoading: false });
         }
     },
 

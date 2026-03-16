@@ -18,6 +18,7 @@ export interface IMeritList extends Document {
     generatedAt: Date;
     settings: any;
     status: 'draft' | 'published' | 'sent_to_rector';
+    hostelName?: string;
 }
 
 const MeritListSchema: Schema = new Schema({
@@ -37,7 +38,8 @@ const MeritListSchema: Schema = new Schema({
         gender: String
     }],
     generatedAt: { type: Date, default: Date.now },
-    settings: { type: Schema.Types.Mixed }
+    settings: { type: Schema.Types.Mixed },
+    hostelName: { type: String }
 });
 
 const MeritList = mongoose.model<IMeritList>('MeritList', MeritListSchema);

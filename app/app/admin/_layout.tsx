@@ -19,6 +19,9 @@ export default function AdminLayout() {
             <Stack.Screen name="merit-list-settings" options={{ title: 'Merit List Settings' }} />
             <Stack.Screen name="leave-management" options={{ title: 'Leave Management', headerShown: false }} />
             <Stack.Screen name="announcements" options={{ title: 'Announcements', headerShown: true }} />
+            <Stack.Screen name="complaints" options={{ title: 'Complaints', headerShown: true }} />
+            <Stack.Screen name="notices" options={{ title: 'Notice Management', headerShown: true }} />
+            <Stack.Screen name="leave-entry" options={{ title: 'Leave Entry', headerShown: false }} />
         </Stack>
     );
 }
