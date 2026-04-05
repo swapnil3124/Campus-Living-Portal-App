@@ -12,7 +12,7 @@ export const submitAssetDetails = async (req: Request, res: Response): Promise<a
         const report = await RoomAsset.findOneAndUpdate(
             { roomNumber, studentId, hostelName },
             { items, submittedAt: new Date() },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         res.status(200).json({ success: true, report });

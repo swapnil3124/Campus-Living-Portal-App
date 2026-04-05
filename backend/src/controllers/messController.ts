@@ -46,7 +46,7 @@ export const updateMessMenu = async (req: Request, res: Response): Promise<any> 
         const menu = await MessMenu.findOneAndUpdate(
             { hostelType: hostelType.toLowerCase() },
             updateData,
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
 
         res.json({ success: true, menu });

@@ -102,9 +102,16 @@ export default function ProfileScreen() {
                 <Animated.View style={[styles.section, { opacity: sectionAnims[2], transform: [{ translateY: sectionAnims[2].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
                     <Text style={styles.sectionTitle}>Hostel Information</Text>
                     <View style={styles.card}>
-                        <InfoRow icon={<Building2 size={16} color={Colors.primary} />} label="Hostel" value={student.hostelName} />
+                        <InfoRow icon={<Building2 size={16} color={Colors.primary} />} label="Hostel" value={student.hostelName || 'Not Selected Yet'} />
                         <InfoRow icon={<BedDouble size={16} color={Colors.primary} />} label="Room / Bed" value={student.isRoomAllocated ? `${student.roomNo} / Bed ${student.bedNumber}` : 'Not Allocated'} />
-                        {student.isRoomAllocated && <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Floor" value={`Floor ${student.floor}`} />}
+                        {student.isRoomAllocated && student.roomNo !== 'N/A' && (
+                            <InfoRow icon={<Hash size={16} color={Colors.primary} />} label="Floor" value={
+                                student.floor === 0 ? 'Ground Floor' :
+                                student.floor === 1 ? '1st Floor' :
+                                student.floor === 2 ? '2nd Floor' :
+                                student.floor === 3 ? '3rd Floor' : `Floor ${student.floor}`
+                            } />
+                        )}
                         <InfoRow icon={<Calendar size={16} color={Colors.primary} />} label="Date of Joining" value={student.dateOfJoining} />
                     </View>
                 </Animated.View>

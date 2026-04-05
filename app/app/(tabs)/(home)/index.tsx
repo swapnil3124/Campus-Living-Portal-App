@@ -290,14 +290,21 @@ export default function HomeScreen() {
         try {
             const serverBase = API_URL.replace('/api', '');
             const fullUrl = url.startsWith('http') ? url : `${serverBase}${url}`;
-            const fileUri = FileSystem.documentDirectory + filename;
-            const downloadResumable = FileSystem.createDownloadResumable(fullUrl, fileUri);
-            const { uri } = await downloadResumable.downloadAsync() as { uri: string };
+            
+            // Just use the filename provided, but sanitize it a bit
+            const safeFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
+            const fileUri = (FileSystem as any).documentDirectory + safeFilename;
+            const downloadResumable = (FileSystem as any).createDownloadResumable(fullUrl, fileUri);
+            const result = await downloadResumable.downloadAsync() as { uri: string };
 
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            } else {
-                Alert.alert('Success', 'File downloaded to: ' + uri);
+            if (result?.uri && await Sharing.isAvailableAsync()) {
+                await (Sharing as any).shareAsync(result.uri, {
+                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    dialogTitle: 'Open Merit List Excel',
+                    UTI: 'com.microsoft.excel.xlsx',
+                });
+            } else if (result?.uri) {
+                Alert.alert('Downloaded', 'File saved to: ' + result.uri);
             }
         } catch (error) {
             console.error(error);
@@ -601,8 +608,28 @@ export default function HomeScreen() {
                                 <TouchableOpacity
                                     style={styles.downloadBtn}
                                     onPress={() => {
-                                        const url = API_URL.replace('/api', '') + selectedAnn.fileUrl;
-                                        Linking.openURL(url);
+                                        const serverBase = API_URL.replace('/api', '');
+                                        const url = selectedAnn.fileUrl!.startsWith('http')
+                                            ? selectedAnn.fileUrl!
+                                            : serverBase + selectedAnn.fileUrl;
+
+                                        // Extract hostelName from URL query params for proper filename
+                                        let filename = 'Merit_List.xlsx';
+                                        try {
+                                            const urlObj = new URL(url);
+                                            const hostel = urlObj.searchParams.get('hostelName') || '';
+                                            const year = new Date().getFullYear();
+                                            const cleanHostel = hostel.replace(/\s+/g, '_');
+                                            // Girls are year-based, boys are hostel-based
+                                            const isGirlsYear = ['1st', '2nd', '3rd'].some(y => hostel.startsWith(y));
+                                            if (isGirlsYear) {
+                                                filename = `${cleanHostel}_Year_Girls_Merit_List_${year}.xlsx`;
+                                            } else if (hostel) {
+                                                filename = `${cleanHostel}_Merit_List_${year}.xlsx`;
+                                            }
+                                        } catch (_) {}
+
+                                        handleDownload(url, filename);
                                     }}
                                 >
                                     <Download size={18} color={Colors.white} />

@@ -20,9 +20,10 @@ import {
     Info,
     CheckCircle2,
     ListChecks,
+    Calendar,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import Colors from '@/constants/colors';
+import Colors from '../../constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
@@ -51,17 +52,19 @@ export default function MeritListSettingsScreen() {
         generateMeritList,
         isLoading
     } = useAdmissionStore();
-    const { token } = useAuth();
+    const { hostelName, token, subRole } = useAuth();
+    const isGirls = (hostelName || subRole || '').toLowerCase().includes('girls');
 
     const [deptSeats, setDeptSeats] = useState<Record<string, string>>({});
+    const [yearSeats, setYearSeats] = useState<Record<string, string>>({ '1st': '', '2nd': '', '3rd': '' });
     const [catPercentages, setCatPercentages] = useState<Record<string, string>>({});
 
     useEffect(() => {
         const loadSettings = async () => {
-            await fetchMeritListSettings();
+            await fetchMeritListSettings(isGirls);
         };
         loadSettings();
-    }, []);
+    }, [isGirls]);
 
     useEffect(() => {
         if (meritListSettings) {
@@ -71,6 +74,15 @@ export default function MeritListSettingsScreen() {
                 initialDeptSeats[dept] = (val !== undefined && val !== null && val !== 0) ? val.toString() : '';
             });
             setDeptSeats(initialDeptSeats);
+
+            if (meritListSettings.yearSeats) {
+                const initialYearSeats: Record<string, string> = {};
+                ['1st', '2nd', '3rd'].forEach(year => {
+                    const val = (meritListSettings.yearSeats as any)?.[year];
+                    initialYearSeats[year] = (val !== undefined && val !== null && val !== 0) ? val.toString() : '';
+                });
+                setYearSeats(initialYearSeats);
+            }
 
             const initialCatPercentages: Record<string, string> = {};
             CATEGORIES.forEach(cat => {
@@ -89,6 +101,11 @@ export default function MeritListSettingsScreen() {
             departmentSeats[dept] = parseInt(deptSeats[dept] || '0', 10);
         });
 
+        const formattedYearSeats: Record<string, number> = {};
+        ['1st', '2nd', '3rd'].forEach(year => {
+            formattedYearSeats[year] = parseInt(yearSeats[year] || '0', 10);
+        });
+
         const categoryPercentages: Record<string, number> = {};
         let totalPct = 0;
         CATEGORIES.forEach(cat => {
@@ -105,7 +122,8 @@ export default function MeritListSettingsScreen() {
         const success = await updateMeritListSettings({
             departmentSeats,
             categoryPercentages,
-        }, token!);
+            yearSeats: formattedYearSeats
+        }, token!, isGirls);
 
         if (success) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -135,7 +153,9 @@ export default function MeritListSettingsScreen() {
         } else {
             Alert.alert(
                 'Generate Merit List',
-                'This will calculate and save a new merit list based on current percentages. Continue?',
+                isGirls 
+                  ? 'This will calculate and save a new merit list for GIRLS, and automatically send login credentials to selected students. Continue?'
+                  : 'This will calculate and save a new merit list based on current percentages. Continue?',
                 [
                     { text: 'Cancel', style: 'cancel' },
                     { text: 'Generate', onPress: () => processGeneration() }
@@ -145,6 +165,34 @@ export default function MeritListSettingsScreen() {
     };
 
     const processGeneration = async () => {
+        const departmentSeats: Record<string, number> = {};
+        DEPARTMENTS.forEach(dept => {
+            departmentSeats[dept] = parseInt(deptSeats[dept] || '0', 10);
+        });
+
+        const formattedYearSeats: Record<string, number> = {};
+        ['1st', '2nd', '3rd'].forEach(year => {
+            formattedYearSeats[year] = parseInt(yearSeats[year] || '0', 10);
+        });
+
+        const categoryPercentages: Record<string, number> = {};
+        CATEGORIES.forEach(cat => {
+            const val = parseFloat(catPercentages[cat] || '0');
+            categoryPercentages[cat] = val;
+        });
+
+        const saveSuccess = await updateMeritListSettings({
+            departmentSeats,
+            categoryPercentages,
+            yearSeats: formattedYearSeats
+        }, token!, isGirls);
+
+        if (!saveSuccess) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            Alert.alert('Error', 'Failed to save settings before generation.');
+            return;
+        }
+
         const result = await generateMeritList(token!);
         if (result.success) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -188,28 +236,55 @@ export default function MeritListSettingsScreen() {
                     contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Total Seats Configuration - Mirroring Boys' side structure */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <School size={22} color={Colors.primary} />
-                            <Text style={styles.sectionTitle}>Department Seats</Text>
+                            <Text style={styles.sectionTitle}>
+                                {isGirls ? "Year-wise Intake Seats" : "Department-wise Seats"}
+                            </Text>
                         </View>
-                        <Text style={styles.sectionSubtitle}>Enter the total number of available seats for each department.</Text>
-
-                        {DEPARTMENTS.map(dept => (
-                            <View key={dept} style={styles.inputGroup}>
-                                <View style={styles.labelContainer}>
-                                    <View style={styles.dot} />
-                                    <Text style={styles.inputLabel}>{dept}</Text>
-                                </View>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="0"
-                                    keyboardType="number-pad"
-                                    value={deptSeats[dept] || ''}
-                                    onChangeText={(text) => setDeptSeats({ ...deptSeats, [dept]: text })}
-                                />
-                            </View>
-                        ))}
+                        <Text style={styles.sectionSubtitle}>
+                            {isGirls 
+                                ? "Enter the total number of available seats for each academic year batch."
+                                : "Enter the total number of available seats for each department."}
+                        </Text>
+                        
+                        <View>
+                            {isGirls ? (
+                                ['1st', '2nd', '3rd'].map(year => (
+                                    <View key={year} style={styles.inputGroup}>
+                                        <View style={styles.labelContainer}>
+                                            <View style={[styles.dot, { backgroundColor: Colors.warning }]} />
+                                            <Text style={styles.inputLabel}>{year} Year Seats</Text>
+                                        </View>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="0"
+                                            keyboardType="number-pad"
+                                            value={yearSeats[year] || ''}
+                                            onChangeText={(text) => setYearSeats({ ...yearSeats, [year]: text })}
+                                        />
+                                    </View>
+                                ))
+                            ) : (
+                                DEPARTMENTS.map(dept => (
+                                    <View key={dept} style={styles.inputGroup}>
+                                        <View style={styles.labelContainer}>
+                                            <View style={styles.dot} />
+                                            <Text style={styles.inputLabel}>{dept}</Text>
+                                        </View>
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="0"
+                                            keyboardType="number-pad"
+                                            value={deptSeats[dept] || ''}
+                                            onChangeText={(text) => setDeptSeats({ ...deptSeats, [dept]: text })}
+                                        />
+                                    </View>
+                                ))
+                            )}
+                        </View>
                     </View>
 
                     <View style={styles.section}>
@@ -217,7 +292,11 @@ export default function MeritListSettingsScreen() {
                             <Users size={22} color={Colors.primary} />
                             <Text style={styles.sectionTitle}>Category-wise Distribution</Text>
                         </View>
-                        <Text style={styles.sectionSubtitle}>Define percentage distribution for each category. (Applied to total seats in each department)</Text>
+                        <Text style={styles.sectionSubtitle}>
+                            {isGirls 
+                              ? "Define percentage distribution for each category (Applied to total seats for each YEAR batch)." 
+                              : "Define percentage distribution for each category (Applied to total seats in each department)."}
+                        </Text>
 
                         <View style={[styles.infoBadge, totalPercentage > 100 && { backgroundColor: '#FFEDEB' }]}>
                             <Text style={[styles.infoBadgeText, totalPercentage > 100 && { color: '#E53E3E' }]}>

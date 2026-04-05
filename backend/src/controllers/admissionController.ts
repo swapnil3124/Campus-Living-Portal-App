@@ -1,11 +1,16 @@
 import { Request, Response } from 'express';
 import Admission from '../models/Admission';
+import { getIO } from '../socket';
 
 export const getAllAdmissions = async (req: Request, res: Response) => {
     try {
-        const user = (req as any).user;
-        const { role, subRole } = user;
+        const { role, subRole } = (req as any).user;
+        const { year } = req.query;
         let query: any = {};
+
+        if (year) {
+            query.year = year;
+        }
 
         // Apply filtering logic based on role and subRole (hostel)
         if (role === 'warden' || (role === 'admin' && subRole)) {
@@ -32,7 +37,7 @@ export const getAllAdmissions = async (req: Request, res: Response) => {
                 query.gender = { $regex: /^female$/i };
             }
         } else if (role === 'rector') {
-            const hNameRaw = subRole.toLowerCase();
+            const hNameRaw = subRole?.toLowerCase();
             if (hNameRaw === 'boys') {
                 query.gender = { $regex: /^male$/i };
             } else if (hNameRaw === 'girls') {
@@ -65,6 +70,7 @@ export const createAdmission = async (req: Request, res: Response) => {
         console.log('Received Admission Data:', JSON.stringify(req.body).substring(0, 200) + '...');
         const newAdmission = new Admission(req.body);
         const savedAdmission = await newAdmission.save();
+        getIO().emit('admissions_updated');
         res.status(201).json(savedAdmission);
     } catch (err: any) {
         console.error('Admission Creation Error:', err.message);
@@ -79,7 +85,7 @@ export const createAdmission = async (req: Request, res: Response) => {
 export const updateAdmission = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
-        const { role, subRole } = user;
+        const { role, subRole } = (req as any).user;
         const admission = await Admission.findById(req.params.id);
 
         if (!admission) return res.status(404).json({ message: 'Admission not found' });
@@ -109,8 +115,9 @@ export const updateAdmission = async (req: Request, res: Response) => {
         const updatedAdmission = await Admission.findByIdAndUpdate(
             req.params.id,
             req.body,
-            { new: true }
+            { returnDocument: 'after' }
         );
+        getIO().emit('admissions_updated');
         res.json(updatedAdmission);
     } catch (err: any) {
         res.status(400).json({ message: err.message });
@@ -120,6 +127,7 @@ export const updateAdmission = async (req: Request, res: Response) => {
 export const deleteAdmission = async (req: Request, res: Response) => {
     try {
         await Admission.findByIdAndDelete(req.params.id);
+        getIO().emit('admissions_updated');
         res.json({ message: 'Admission deleted' });
     } catch (err: any) {
         res.status(500).json({ message: err.message });

@@ -20,6 +20,7 @@ export default function StudentLayout() {
             <Stack.Screen name="room" options={{ title: 'Room Info' }} />
             <Stack.Screen name="leave" options={{ title: 'Leave Applications' }} />
             <Stack.Screen name="new-leave" options={{ title: 'Apply Leave', presentation: 'modal' }} />
+            <Stack.Screen name="hostel-exit" options={{ title: 'Hostel Exit', headerShown: false }} />
             <Stack.Screen name="emergency" options={{ title: 'Emergency', headerStyle: { backgroundColor: Colors.error } }} />
         </Stack>
     );

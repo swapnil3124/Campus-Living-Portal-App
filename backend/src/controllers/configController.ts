@@ -24,8 +24,17 @@ export const getConfig = async (req: Request, res: Response) => {
                     value: {
                         departmentSeats: {},
                         categoryPercentages: {}
-                    }
+                     }
                 });
+            } else if (key === 'girls_merit_list_config') {
+                 config = new SystemConfig({
+                     key,
+                     value: {
+                         departmentSeats: {},
+                         categoryPercentages: {},
+                         yearSeats: { '1st': 0, '2nd': 0, '3rd': 0 }
+                     }
+                 });
             } else {
                 return res.status(404).json({ message: 'Config not found' });
             }
@@ -42,7 +51,7 @@ export const setConfig = async (req: Request, res: Response) => {
         const config = await SystemConfig.findOneAndUpdate(
             { key },
             { value },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
         );
         res.json(config);
     } catch (error: any) {

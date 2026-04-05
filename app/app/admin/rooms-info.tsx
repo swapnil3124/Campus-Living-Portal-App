@@ -59,13 +59,22 @@ export default function RoomsInfoScreen() {
         if (lower.includes('shivneri')) return 'Shivneri';
         if (lower.includes('lenyadri')) return 'Lenyadri';
         if (lower.includes('bhimashankar')) return 'Bhimashankar';
-        if (lower.includes('shwetambara') || lower.includes('shwetamber')) return 'Shwetambara';
-        if (lower.includes('saraswati')) return 'Saraswati';
-        if (lower.includes('jijau')) return 'Jijau';
+        if (lower.includes('shwetambar')) return 'Shwetambar';  // Girls hostel
+        if (lower.includes('saraswati')) return 'Saraswati';    // Girls hostel
         return h;
     };
 
     const hostelName = normalizeHostel(contextHostelName);
+    const isGirlsHostel = ['Saraswati', 'Shwetambar'].includes(hostelName || '');
+
+    // Girls hostels have 3 floors (Ground/1st/2nd), boys have 4
+    const availableFloors = isGirlsHostel
+        ? [
+            { label: 'Ground Floor', num: 0 },
+            { label: '1st Floor', num: 1 },
+            { label: '2nd Floor', num: 2 },
+          ]
+        : floors;
     
     const [loading, setLoading] = useState(true);
     const [rooms, setRooms] = useState<any[]>([]);
@@ -245,7 +254,7 @@ export default function RoomsInfoScreen() {
                 </View>
                 <View style={styles.floorRow}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-                        {floors.map((f) => (
+                        {availableFloors.map((f) => (
                             <TouchableOpacity
                                 key={f.num}
                                 style={[styles.floorChip, selectedFloor === f.num && styles.activeFloorChip]}

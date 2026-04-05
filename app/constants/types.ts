@@ -38,7 +38,7 @@ export interface Student {
     bedNumber: string;
     department: string;
     year: string;
-    status: 'active' | 'on-leave' | 'exited' | 'pending';
+    status: 'active' | 'on-leave' | 'exited' | 'pending' | 'past';
     phone: string;
     email: string;
     category: string;
@@ -139,7 +139,27 @@ export interface Admission {
     year: '1st' | '2nd' | '3rd';
     photoUrl?: string;
     additionalData: Record<string, any>;
-    status: 'pending' | 'verified' | 'accepted' | 'rejected';
+    status: 'pending' | 'verified' | 'accepted' | 'rejected' | 'past';
     appliedAt: string;
     studentPassword?: string;
+    isRoomAllocated?: boolean;
+    allocatedHostel?: string;
+    allocatedRoom?: string;
+    allocatedBed?: number | string;
+}
+
+export interface HostelExit {
+    _id: string;
+    studentId: string;
+    studentName: string;
+    enrollmentNo: string;
+    hostelName: string;
+    roomNo: string;
+    bedNumber: string;
+    exitDate: string;
+    reason: string;
+    exitAssets: { name: string, count: number, damagedCount: number, condition: string }[];
+    status: 'pending' | 'approved' | 'rejected';
+    wardenRemark: string;
+    createdAt: string;
 }

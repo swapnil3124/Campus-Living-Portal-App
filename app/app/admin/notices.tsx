@@ -51,12 +51,13 @@ export default function WardenNoticesScreen() {
     const normalizeHostel = (h: string | null) => {
         if (!h) return null;
         const lower = h.toLowerCase().trim();
-        if (lower.includes('shivneri')) return 'Shivneri Hostel';
-        if (lower.includes('lenyadri')) return 'Lenyadri Hostel';
-        if (lower.includes('bhimashankar')) return 'Bhimashankar Hostel';
-        if (lower.includes('shwetambara')) return 'Shwetambara Hostel';
-        if (lower.includes('saraswati')) return 'Saraswati Hostel';
-        if (lower.includes('jijau')) return 'Jijau Hostel';
+        if (lower.includes('shivneri')) return 'Shivneri';
+        if (lower.includes('lenyadri')) return 'Lenyadri';
+        if (lower.includes('bhimashankar')) return 'Bhimashankar';
+        if (lower.includes('shwetambar')) return 'Shwetambar';  // Girls hostel
+        if (lower.includes('saraswati')) return 'Saraswati';    // Girls hostel
+        if (lower === 'girls') return 'girls';  // Rector — handled server-side
+        if (lower === 'boys') return 'boys';
         return h;
     };
 

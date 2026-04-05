@@ -96,45 +96,43 @@ export const getWardenLeaves = async (req: Request, res: Response): Promise<any>
         if (role === 'admin' && subRole) {
             const hName = subRole.toLowerCase();
             if (hName === 'shivneri') {
-                query.studentYear = { $regex: /first|1st/i };
                 query.hostelName = { $regex: /^shivneri$/i };
             } else if (hName === 'lenyadri') {
-                query.studentYear = { $regex: /second|2nd/i };
                 query.hostelName = { $regex: /^lenyadri$/i };
             } else if (hName === 'bhimashankar') {
-                query.studentYear = { $regex: /third|3rd/i };
                 query.hostelName = { $regex: /^bhimashankar$/i };
             } else if (hName === 'saraswati') {
-                query.studentYear = { $regex: /first|1st/i };
                 query.hostelName = { $regex: /^saraswati$/i };
-            } else if (['shwetamber', 'shwetambara'].includes(hName)) {
-                query.studentYear = { $regex: /second|2nd|third|3rd/i };
-                query.hostelName = { $regex: /shwetamber|shwetambara/i };
+            } else if (['shwetambar', 'shwetambara'].includes(hName)) {
+                // Both spelling variants map to the Shwetambar girls hostel
+                query.hostelName = { $regex: /^shwetambar(a)?$/i };
             }
         } else if (role === 'rector' && subRole) {
             const hName = subRole.toLowerCase();
             if (hName === 'girls') {
-                query.hostelName = { $regex: /saraswati|shwetamber|shwetambara|jijau/i };
+                // Girls rector sees leaves from Saraswati AND Shwetambar, plus generic 'girls'
+                query.hostelName = { $regex: /saraswati|shwetambara|shwetambar|girls/i };
             } else if (hName === 'boys') {
-                query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar/i };
+                query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar|boys/i };
             }
         } else {
-            // Fallback to query parameter if authorized or if no user (should not happen with middleware)
+            // Fallback to query parameter
             if (!hostelName) {
                 return res.status(400).json({ error: 'Hostel name is required' });
             }
             const hName = (hostelName as string).toLowerCase();
             if (hName === 'shivneri') {
-                query.studentYear = { $regex: /first|1st/i };
                 query.hostelName = { $regex: /^shivneri$/i };
             } else if (hName === 'lenyadri') {
-                query.studentYear = { $regex: /second|2nd/i };
                 query.hostelName = { $regex: /^lenyadri$/i };
             } else if (hName === 'bhimashankar') {
-                query.studentYear = { $regex: /third|3rd/i };
                 query.hostelName = { $regex: /^bhimashankar$/i };
+            } else if (hName === 'saraswati') {
+                query.hostelName = { $regex: /^saraswati$/i };
+            } else if (['shwetambar', 'shwetambara'].includes(hName)) {
+                query.hostelName = { $regex: /^shwetambar(a)?$/i };
             } else if (hName === 'girls') {
-                query.hostelName = { $regex: /saraswati|shwetamber|shwetambara|jijau/i };
+                query.hostelName = { $regex: /saraswati|shwetambar/i };
             } else if (hName === 'boys') {
                 query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar/i };
             } else {
@@ -191,7 +189,7 @@ export const updateLeaveStatus = async (req: Request, res: Response): Promise<an
         const leave = await Leave.findByIdAndUpdate(
             leaveId,
             updateData,
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!leave) {

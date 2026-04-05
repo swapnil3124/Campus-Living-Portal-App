@@ -27,16 +27,10 @@ import {
     XCircle,
     Building2,
     Calendar,
-} from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import Colors from '@/constants/colors';
-import { useAdmissionStore } from '@/store/admission-store';
-import { useAnnouncementStore } from '@/store/announcement-store';
-import { useAuth } from '@/contexts/AuthContext';
-import * as Haptics from 'expo-haptics';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
-import {
+    X,
+    Clock,
+    Key,
+    SlidersHorizontal,
     Trash2,
     Send,
     FileSpreadsheet,
@@ -52,10 +46,41 @@ import {
     Info,
     ChevronRight,
     Maximize2,
-    X,
     ExternalLink,
-    Key,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+const Colors = {
+    primary: '#00897B',
+    primaryDark: '#005B4F',
+    primaryLight: '#B2DFDB',
+    primaryGhost: '#E0F2F1',
+    accent: '#FF8F00',
+    accentLight: '#FFE082',
+    surface: '#FFFFFF',
+    background: '#F0F4F7',
+    card: '#FFFFFF',
+    text: '#1B2838',
+    textSecondary: '#637381',
+    textLight: '#919EAB',
+    border: '#E8ECF0',
+    success: '#2E7D32',
+    successLight: '#E8F5E9',
+    warning: '#F9A825',
+    warningLight: '#FFF8E1',
+    error: '#D32F2F',
+    errorLight: '#FFEBEE',
+    info: '#1565C0',
+    infoLight: '#E3F2FD',
+    overlay: 'rgba(0,0,0,0.5)',
+    white: '#FFFFFF',
+    black: '#000000',
+};
+import { useAdmissionStore } from '@/store/admission-store';
+import { useAnnouncementStore } from '@/store/announcement-store';
+import { useAuth } from '@/contexts/AuthContext';
+import * as Haptics from 'expo-haptics';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 import { BlurView } from 'expo-blur';
 import * as XLSX from 'xlsx';
 
@@ -92,10 +117,10 @@ export default function MeritListResultsScreen() {
 
     const availableHostels = React.useMemo(() => {
         if (!isRector) return [];
-        if (hostelName?.toLowerCase() === 'boys') return ['Shivneri', 'Lenyadri', 'Bhimashankar'];
-        if (hostelName?.toLowerCase() === 'girls') return ['Saraswati', 'Shwetambara'];
+        if (hostelName?.toLowerCase() === 'boys' || subRole?.toLowerCase() === 'boys') return ['Shivneri', 'Lenyadri', 'Bhimashankar'];
+        if (isGirlsHostel) return ['1st Year', '2nd Year', '3rd Year'];
         return [];
-    }, [isRector, hostelName]);
+    }, [isRector, hostelName, subRole, isGirlsHostel]);
 
     React.useEffect(() => {
         if (isRector && availableHostels.length > 0 && !selectedRectorHostel) {
@@ -330,11 +355,12 @@ export default function MeritListResultsScreen() {
     const latestListsMap = new Map();
     meritLists.forEach(list => {
         // Rector ONLY sees lists from wardens that have been sent for review or published
-        if (isRector && list.status === 'draft') return;
+        if (isRector && !isGirlsHostel && list.status === 'draft') return;
 
-        // Group ALL lists strictly by department so we never have duplicate generation objects
-        if (!latestListsMap.has(list.department) || new Date(list.generatedAt) > new Date(latestListsMap.get(list.department).generatedAt)) {
-            latestListsMap.set(list.department, list);
+        // Group ALL lists strictly by department (or year for girls)
+        const key = list.department; 
+        if (!latestListsMap.has(key) || new Date(list.generatedAt) > new Date(latestListsMap.get(key).generatedAt)) {
+            latestListsMap.set(key, list);
         }
     });
 
@@ -357,10 +383,19 @@ export default function MeritListResultsScreen() {
     // Filter Students based on Warden's Hostel
     const allStudents = React.useMemo(() => {
         let result = [...allShortlisted];
+        
+        if (isGirlsHostel) {
+            // For girls, Rector selects Year via tabs
+            if (isRector && selectedRectorHostel) {
+                result = result.filter(s => s.deptName === selectedRectorHostel);
+            }
+            return result;
+        }
+
         const hNameRaw = isRector && selectedRectorHostel ? selectedRectorHostel.toLowerCase() : (hostelName?.toLowerCase() || '');
 
         // If it's a warden/admin with a specific hostel, restrict view
-        if (hostelName) {
+        if (hostelName || (isRector && selectedRectorHostel)) {
             if (hNameRaw === 'shivneri') {
                 result = result.filter(s => s.year === '1st' && s.gender?.toLowerCase() === 'male');
             } else if (hNameRaw === 'lenyadri') {
@@ -378,7 +413,7 @@ export default function MeritListResultsScreen() {
             }
         }
         return result;
-    }, [allShortlisted, hostelName, role, selectedRectorHostel]);
+    }, [allShortlisted, hostelName, role, selectedRectorHostel, isGirlsHostel, isRector]);
 
     const departments = Array.from(new Set(allStudents.map(s => s.deptName))).sort();
 
@@ -402,7 +437,7 @@ export default function MeritListResultsScreen() {
 
     // Check if an announcement already exists for this rector's selected hostel
     const isPublished = isRector && activeAnnouncements.some(a =>
-        a.message === `Merit List Published: ${selectedRectorHostel || 'Generic'} Hostel` && a.isActive
+        a.message.includes(`Merit List Published: ${isGirlsHostel ? 'Girls' : (selectedRectorHostel || 'Generic')} Hostel`) && a.isActive
     );
 
 
@@ -445,11 +480,11 @@ export default function MeritListResultsScreen() {
 
             const currentYear = new Date().getFullYear();
             const fileName = `Merit_list_${currentYear}.xlsx`;
-            const fileUri = FileSystem.cacheDirectory + fileName;
+            const fileUri = (FileSystem as any).cacheDirectory + fileName;
 
             // Save to file system as base64
-            await FileSystem.writeAsStringAsync(fileUri, wbout, {
-                encoding: FileSystem.EncodingType.Base64,
+            await (FileSystem as any).writeAsStringAsync(fileUri, wbout, {
+                encoding: (FileSystem as any).EncodingType.Base64,
             });
 
             if (await Sharing.isAvailableAsync()) {
@@ -509,14 +544,16 @@ export default function MeritListResultsScreen() {
         }
 
         if (isRector) {
-            if (isPublished || latestLists.length === 0) {
-                Alert.alert('Info', 'There are no pending merit lists to publish to the homepage.');
+            const listToPublish = latestLists.find(l => isGirlsHostel ? l.department === selectedRectorHostel : true);
+            
+            if (isPublished || !listToPublish || listToPublish.status === 'published') {
+                Alert.alert('Info', 'This batch has already been published to the home screen.');
                 return;
             }
 
             Alert.alert(
                 'Publish to Homepage',
-                `This will officially publish ${latestLists.length} hostel merit lists to the application homepage. Continue?`,
+                `This will officially publish the ${selectedRectorHostel} merit list to the homepage. Students will then be able to see their selection. Proceed?`,
                 [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -524,25 +561,17 @@ export default function MeritListResultsScreen() {
                         onPress: async () => {
                             setIsPublishing(true);
                             try {
-                                let successCount = 0;
-                                let errorMessage = '';
                                 const { publishMeritList } = useAdmissionStore.getState();
-                                for (const list of latestLists) {
-                                    try {
-                                        const success = await publishMeritList(list._id, selectedRectorHostel || 'Generic', token!);
-                                        if (success) successCount++;
-                                    } catch (err: any) {
-                                        errorMessage = err.message || 'Error publishing list.';
-                                    }
-                                }
+                                // Pass the actual year (e.g. '1st Year') for girls, not just 'Girls'
+                                const success = await publishMeritList(listToPublish._id, selectedRectorHostel || (isGirlsHostel ? 'Girls' : 'Generic'), token!);
 
-                                if (successCount > 0) {
+                                if (success) {
                                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                    Alert.alert('Success', `Published ${successCount} lists to the Homepage.`);
+                                    Alert.alert('Success', `Published the ${selectedRectorHostel} list to the Homepage.`);
                                     await useAdmissionStore.getState().fetchMeritLists(token!);
                                     await useAnnouncementStore.getState().fetchActiveAnnouncements();
                                 } else {
-                                    Alert.alert('Error', errorMessage || 'Failed to publish lists. Please check announcements.');
+                                    Alert.alert('Error', 'Failed to publish list.');
                                 }
                             } catch (e: any) {
                                 Alert.alert('Error', e.message || 'An unexpected error occurred while publishing.');
@@ -586,7 +615,7 @@ export default function MeritListResultsScreen() {
 
         Alert.alert(
             'Generate Emails & Passwords',
-            `This will generate secure login passwords and instantly send emails to ${validStudentIds.length} students from the selected hostel. Proceed?`,
+            `This will generate secure login passwords for ${validStudentIds.length} students in the ${selectedRectorHostel} batch. Proceed?`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -594,35 +623,23 @@ export default function MeritListResultsScreen() {
                     onPress: async () => {
                         setIsPublishing(true);
                         try {
-                            let successCount = 0;
-                            let allGenerated: any[] = [];
                             const { generatePasswords } = useAdmissionStore.getState();
-                            for (const list of publishedLists) {
-                                const listStudentIds = validStudentIds.filter((id: string) =>
-                                    allStudents.find((s: any) => s.admissionId === id && s.listId === list._id)
-                                );
-                                if (listStudentIds.length === 0) continue;
+                            const targetList = latestLists.find(l => isGirlsHostel ? l.department === selectedRectorHostel : l.status === 'published');
+                            
+                            if (!targetList) return;
 
-                                const response = await generatePasswords(list._id, listStudentIds, token!);
-                                if (response.success) {
-                                    successCount++;
-                                    if (response.passwords) {
-                                        allGenerated = [...allGenerated, ...response.passwords];
-                                    }
-                                }
-                            }
-
-                            if (successCount > 0) {
+                            const response = await generatePasswords(targetList._id, validStudentIds, token!);
+                            if (response.success) {
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                Alert.alert('Success', `Passwords generated successfully for ${allGenerated.length} students. You can now send them emails.`);
-                                setGeneratedPasswords(allGenerated);
+                                Alert.alert('Success', `Passwords generated successfully for ${response.passwords?.length || 0} students. You can now send them emails.`);
+                                if (response.passwords) setGeneratedPasswords(response.passwords);
                                 setPasswordsModalVisible(true);
-                                useAdmissionStore.getState().fetchAdmissions(token!); // Pull updated data
+                                useAdmissionStore.getState().fetchAdmissions(token!); 
                             } else {
                                 Alert.alert('Error', 'Failed to generate passwords.');
                             }
                         } catch (e) {
-                            Alert.alert('Error', 'An unexpected error occurred generating passwords.');
+                            Alert.alert('Error', 'An unexpected error occurred.');
                         } finally {
                             setIsPublishing(false);
                         }
@@ -681,12 +698,12 @@ export default function MeritListResultsScreen() {
 
             const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
             const fileName = `Student_Passwords_${new Date().getFullYear()}.xlsx`;
-            const fileUri = FileSystem.cacheDirectory + fileName;
+            const fileUri = (FileSystem as any).cacheDirectory + fileName;
 
-            await FileSystem.writeAsStringAsync(fileUri, wbout, { encoding: FileSystem.EncodingType.Base64 });
+            await (FileSystem as any).writeAsStringAsync(fileUri, wbout, { encoding: (FileSystem as any).EncodingType.Base64 });
 
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(fileUri);
+            if (await (Sharing as any).isAvailableAsync()) {
+                await (Sharing as any).shareAsync(fileUri);
             } else {
                 Alert.alert('Error', 'Sharing not available');
             }
@@ -743,22 +760,31 @@ export default function MeritListResultsScreen() {
                         <ActivityIndicator size="large" color={Colors.primary} />
                         <Text style={styles.loadingText}>Analyzing Applications...</Text>
                     </View>
-                ) : allStudents.length === 0 ? (
+                ) : (allStudents.length === 0) ? (
                     <View style={styles.emptyContainer}>
-                        {isRector ? (
+                        {(isRector && !isGirlsHostel) ? (
                             <>
+                                <View style={styles.emptyIconCircle}>
+                                    <Clock size={32} color={Colors.textSecondary} />
+                                </View>
                                 <Text style={styles.emptyTitle}>Admission Review Empty</Text>
                                 <Text style={styles.emptyText}>Waiting for Hostel Wardens to finalize and send their merit lists for your review.</Text>
                             </>
                         ) : (
                             <>
+                                <View style={styles.emptyIconCircle}>
+                                    <AlertCircle size={32} color={Colors.textSecondary} />
+                                </View>
                                 <Text style={styles.emptyTitle}>No Generated Data</Text>
-                                <Text style={styles.emptyText}>Analyze registered student data first by generating a merit list from the config screen.</Text>
+                                <Text style={styles.emptyText}>Analyze registered student data first by generating a merit list from the configuration screen.</Text>
                                 <TouchableOpacity
                                     style={styles.actionBtn}
                                     onPress={() => router.replace('/admin/merit-list-settings')}
                                 >
-                                    <Text style={styles.actionBtnText}>Go to Config</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <SlidersHorizontal size={18} color={Colors.white} />
+                                        <Text style={styles.actionBtnText}>Go to Configuration</Text>
+                                    </View>
                                 </TouchableOpacity>
                             </>
                         )}
@@ -785,15 +811,15 @@ export default function MeritListResultsScreen() {
                                                     Across {latestLists.length} Departments
                                                 </Text>
                                             </View>
-                                            <View style={[styles.badge, (isWarden ? !hasDraftWardenLists : latestLists.every(l => l.status === 'published')) && { backgroundColor: '#2DCE89' }]}>
-                                                <Text style={styles.badgeText}>{isWarden ? (!hasDraftWardenLists ? 'SENT TO RECTOR' : 'PENDING') : (latestLists.every(l => l.status === 'published') ? 'ALL PUBLISHED' : 'PENDING PUBLISH')}</Text>
+                                            <View style={[styles.badge, (allStudents.length > 0 && allStudents.every(s => s.listStatus === 'published')) && { backgroundColor: '#2DCE89' }]}>
+                                                <Text style={styles.badgeText}>{allStudents.length > 0 && allStudents.every(s => s.listStatus === 'published') ? 'PUBLISHED' : 'PENDING PUBLISH'}</Text>
                                             </View>
                                         </View>
                                         <View style={styles.divider} />
                                         <View style={styles.summaryGrid}>
                                             <View style={styles.summaryItem}>
-                                                <Text style={styles.summaryLabel}>Total Departments</Text>
-                                                <Text style={styles.summaryValue}>{departments.length}</Text>
+                                                <Text style={styles.summaryLabel}>{isGirlsHostel ? 'Target Batch' : 'Total Departments'}</Text>
+                                                <Text style={styles.summaryValue}>{isGirlsHostel ? selectedRectorHostel : departments.length}</Text>
                                             </View>
                                             <View style={styles.summaryItem}>
                                                 <Text style={styles.summaryLabel}>Total Shortlisted</Text>
@@ -1401,6 +1427,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: 40,
+    },
+    emptyIconCircle: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: Colors.primary + '10',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
     },
     emptyText: {
         textAlign: 'center',
@@ -2184,8 +2219,8 @@ const SafePdfViewer = ({ uri, buildHtml, style }: { uri: string; buildHtml: (u: 
 
     React.useEffect(() => {
         const id = Math.random().toString(36).substring(7);
-        const fileUri = FileSystem.cacheDirectory + `pdf_viewer_${id}.html`;
-        FileSystem.writeAsStringAsync(fileUri, buildHtml(uri), { encoding: FileSystem.EncodingType.UTF8 })
+        const fileUri = (FileSystem as any).cacheDirectory + `pdf_viewer_${id}.html`;
+        (FileSystem as any).writeAsStringAsync(fileUri, buildHtml(uri), { encoding: (FileSystem as any).EncodingType.UTF8 })
             .then(() => setLocalUri(fileUri))
             .catch(console.error);
     }, [uri, buildHtml]);

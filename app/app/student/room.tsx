@@ -63,7 +63,7 @@ export default function RoomScreen() {
     const cardAnims = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
 
     const fetchAssets = useCallback(async () => {
-        if (!student?.roomNo || !student?.id || !student?.hostelName) return;
+        if (!student?.roomNo || !student?.id || !student?.hostelName || student.roomNo === 'N/A') return;
         try {
             setLoading(true);
             const response = await fetch(`${API_URL}/rooms/assets?roomNumber=${student.roomNo}&studentId=${student.id}&hostelName=${encodeURIComponent(student.hostelName)}`);
@@ -90,7 +90,7 @@ export default function RoomScreen() {
     }, [student]);
 
     const fetchRoommates = useCallback(async () => {
-        if (!student?.roomNo || !student?.id || !student?.hostelName) return;
+        if (!student?.roomNo || !student?.id || !student?.hostelName || student.roomNo === 'N/A') return;
         try {
             const response = await fetch(`${API_URL}/rooms/roommates?roomNumber=${student.roomNo}&studentId=${student.id}&hostelName=${encodeURIComponent(student.hostelName)}`);
             const data = await response.json();
@@ -189,7 +189,7 @@ export default function RoomScreen() {
                     <View style={styles.roomGrid}>
                         <View style={styles.roomStat}>
                             <Text style={styles.roomStatLabel}>Hostel</Text>
-                            <Text style={styles.roomStatValue}>{student?.hostelName ?? '-'}</Text>
+                            <Text style={styles.roomStatValue}>{student?.hostelName ?? 'Not Selected'}</Text>
                         </View>
                         <View style={styles.roomStat}>
                             <Text style={styles.roomStatLabel}>Room No</Text>
@@ -197,7 +197,14 @@ export default function RoomScreen() {
                         </View>
                         <View style={styles.roomStat}>
                             <Text style={styles.roomStatLabel}>Floor</Text>
-                            <Text style={styles.roomStatValue}>{student?.floor ?? '-'}</Text>
+                            <Text style={styles.roomStatValue}>
+                                {student?.roomNo && student.roomNo !== 'N/A'
+                                    ? (student.floor === 0 ? 'Ground' :
+                                       student.floor === 1 ? '1st' :
+                                       student.floor === 2 ? '2nd' :
+                                       student.floor === 3 ? '3rd' : `-`)
+                                    : '-'}
+                            </Text>
                         </View>
                         <View style={styles.roomStat}>
                             <Text style={styles.roomStatLabel}>Bed</Text>

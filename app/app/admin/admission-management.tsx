@@ -49,7 +49,7 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
-import Colors from '@/constants/colors';
+import Colors from '../../constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
 import { Admission } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -71,7 +71,7 @@ const CATEGORIES = [
 export default function AdmissionManagementScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const { hostelName, token } = useAuth();
+    const { hostelName, token, subRole } = useAuth();
     const { admissions, updateAdmission, fetchAdmissions, getAdmissionById, isLoading, regConfig } = useAdmissionStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAdmission, setSelectedAdmission] = useState<Admission | null>(null);
@@ -87,11 +87,13 @@ export default function AdmissionManagementScreen() {
     const [filterStatus, setFilterStatus] = useState<string | null>('pending');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
 
+    const [filterYear, setFilterYear] = useState<string | null>(null);
+
     React.useEffect(() => {
         if (token) {
-            fetchAdmissions(token);
+            fetchAdmissions(token, filterYear || undefined);
         }
-    }, [token]);
+    }, [token, filterYear]);
 
     // Document Viewer State
     const [viewerVisible, setViewerVisible] = useState(false);
@@ -303,13 +305,44 @@ export default function AdmissionManagementScreen() {
                     style={styles.searchMeritBtn}
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push('/admin/merit-list-results');
+                        const isGirls = (hostelName || subRole || '').toLowerCase().includes('girls');
+                        router.push(isGirls ? '/admin/merit-list-settings' : '/admin/merit-list-results');
                     }}
                 >
                     <ListChecks size={20} color={Colors.white} />
                     <Text style={styles.searchMeritBtnText}>Merit list</Text>
                 </TouchableOpacity>
             </View>
+
+            {hostelName?.toLowerCase() === 'girls' && (
+                <View style={styles.yearFilterWrapper}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.yearFilterScroll}>
+                        {[
+                            { id: null, label: 'All Years' },
+                            { id: '1st', label: '1st Year' },
+                            { id: '2nd', label: '2nd Year' },
+                            { id: '3rd', label: '3rd Year' },
+                        ].map((y) => (
+                            <TouchableOpacity
+                                key={String(y.id)}
+                                style={[
+                                    styles.yearTab,
+                                    filterYear === y.id && styles.yearTabActive
+                                ]}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    setFilterYear(y.id);
+                                }}
+                            >
+                                <Text style={[
+                                    styles.yearTabText,
+                                    filterYear === y.id && styles.yearTabTextActive
+                                ]}>{y.label}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
 
             <View style={styles.quickFiltersWrapper}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickFilters}>
@@ -1263,6 +1296,35 @@ const styles = StyleSheet.create({
     },
     approveBtn: {
         backgroundColor: '#28A745',
+    },
+    yearFilterWrapper: {
+        backgroundColor: Colors.white,
+        paddingBottom: 4,
+    },
+    yearFilterScroll: {
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        gap: 12,
+    },
+    yearTab: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 12,
+        backgroundColor: Colors.background,
+        borderWidth: 1,
+        borderColor: Colors.border,
+    },
+    yearTabActive: {
+        backgroundColor: Colors.primary,
+        borderColor: Colors.primary,
+    },
+    yearTabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.textSecondary,
+    },
+    yearTabTextActive: {
+        color: Colors.white,
     },
     quickFiltersWrapper: {
         backgroundColor: Colors.white,

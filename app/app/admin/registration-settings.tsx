@@ -27,12 +27,14 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
+import { useAuth } from '@/contexts/AuthContext';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
 export default function RegistrationSettingsScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { regConfig, fetchRegConfig, updateRegConfig, isLoading } = useAdmissionStore();
+    const { token } = useAuth();
 
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date());
@@ -77,7 +79,7 @@ export default function RegistrationSettingsScreen() {
             endDate: endDate.toISOString(),
             isOpen,
             pages: pages
-        });
+        }, token || undefined);
         if (success) {
             Alert.alert('Success', 'Admission form system updated');
         } else {

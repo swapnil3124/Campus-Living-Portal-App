@@ -7,6 +7,7 @@ import {
     Animated,
     TouchableOpacity,
     ActivityIndicator,
+    Alert,
     Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
@@ -49,6 +50,7 @@ const dashboardItems = [
     { key: 'mess', label: 'Mess', icon: UtensilsCrossed, color: '#2E7D32', bg: '#E8F5E9', route: '/student/mess' },
     { key: 'room', label: 'Room Info', icon: BedDouble, color: '#6A1B9A', bg: '#F3E5F5', route: '/student/room' },
     { key: 'leave', label: 'Leave', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/student/leave' },
+    { key: 'exit', label: 'Hostel Exit', icon: LogOut, color: '#455A64', bg: '#ECEFF1', route: '/student/hostel-exit' },
     { key: 'emergency', label: 'Emergency', icon: Siren, color: '#C62828', bg: '#FFEBEE', route: '/student/emergency' },
 ];
 
@@ -72,10 +74,7 @@ const boysRectorDashboardItems = [
     { key: 'admission', label: 'Admission Review', icon: ClipboardList, color: '#00897B', bg: '#E0F2F1', route: '/admin/merit-list-results' },
     { key: 'students', label: 'Student Directory', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
     { key: 'notices', label: 'Official Notices', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
-    { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
-    { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
     { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
-    { key: 'rooms-info', label: 'Rooms Info', icon: BedDouble, color: '#039BE5', bg: '#E1F5FE', route: '/admin/rooms-info' },
 ];
 
 const girlsRectorDashboardItems = [
@@ -83,10 +82,7 @@ const girlsRectorDashboardItems = [
     { key: 'reg-settings', label: 'Registration Settings', icon: Calendar, color: Colors.primary, bg: Colors.primaryGhost, route: '/admin/registration-settings' },
     { key: 'students', label: 'Student Directory', icon: Users, color: '#2E7D32', bg: '#E8F5E9', route: '/admin/students' },
     { key: 'notices', label: 'Official Notices', icon: FileText, color: '#6A1B9A', bg: '#F3E5F5', route: '/admin/notices' },
-    { key: 'hostel', label: 'Campus Overview', icon: Building2, color: '#00695C', bg: '#E0F2F1', route: '/admin/hostel' },
-    { key: 'leave', label: 'Leave Approvals', icon: CalendarDays, color: '#00838F', bg: '#E0F7FA', route: '/admin/leave-management' },
     { key: 'announcements', label: 'Announcements', icon: Bell, color: '#D81B60', bg: '#FCE4EC', route: '/admin/announcements' },
-    { key: 'rooms-info', label: 'Rooms Info', icon: BedDouble, color: '#039BE5', bg: '#E1F5FE', route: '/admin/rooms-info' },
 ];
 
 const contractorDashboardItems = [
@@ -146,11 +142,13 @@ function StudentDashboard() {
                         contentFit="cover"
                     />
                     <View style={styles.profileInfo}>
-                        <Text style={styles.profileName}>{student?.name ?? 'Student'}</Text>
+                            <Text style={styles.profileName}>{student?.name ?? 'Student'}</Text>
                         <Text style={styles.profileEnroll}>{student?.enrollmentNo}</Text>
                         <View style={styles.profileBadge}>
-                            <View style={styles.statusDot} />
-                            <Text style={styles.profileStatus}>{student?.status === 'active' ? 'Active' : student?.status}</Text>
+                            <View style={[styles.statusDot, student?.status === 'past' && { backgroundColor: Colors.error }]} />
+                            <Text style={styles.profileStatus}>
+                                {student?.status === 'active' ? 'Active' : student?.status === 'past' ? 'Exited From Hostel' : student?.status}
+                            </Text>
                             <Text style={styles.profileHostel}> • {student?.hostelName}</Text>
                         </View>
                     </View>
@@ -161,6 +159,9 @@ function StudentDashboard() {
                 <View style={styles.gridContainer}>
                     {dashboardItems.map((item, index) => {
                         const IconComp = item.icon;
+                        const isExited = student?.status === 'past';
+                        const isLocked = isExited && !['profile', 'exit'].includes(item.key);
+
                         return (
                             <Animated.View
                                 key={item.key}
@@ -176,18 +177,28 @@ function StudentDashboard() {
                                 ]}
                             >
                                 <TouchableOpacity
-                                    style={styles.gridCard}
+                                    style={[styles.gridCard, isLocked && { opacity: 0.6 }]}
                                     activeOpacity={0.9}
                                     onPressIn={() => { handlePressIn(index); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
                                     onPressOut={() => handlePressOut(index)}
-                                    onPress={() => router.push(item.route as any)}
+                                    onPress={() => {
+                                        if (isLocked) {
+                                            Alert.alert('Access Denied', 'You have exited the hostel and can no longer access this feature.');
+                                        } else {
+                                            router.push(item.route as any);
+                                        }
+                                    }}
                                     testID={`dash-${item.key}`}
                                 >
-                                    <View style={[styles.gridIconWrap, { backgroundColor: item.bg }]}>
-                                        <IconComp size={26} color={item.color} />
+                                    <View style={[styles.gridIconWrap, { backgroundColor: isLocked ? '#F1F5F9' : item.bg }]}>
+                                        <IconComp size={26} color={isLocked ? '#94A3B8' : item.color} />
                                     </View>
-                                    <Text style={styles.gridLabel}>{item.label}</Text>
-                                    <ChevronRight size={14} color={Colors.textLight} style={styles.gridArrow} />
+                                    <Text style={[styles.gridLabel, isLocked && { color: '#94A3B8' }]}>{item.label}</Text>
+                                    {isLocked ? (
+                                        <Lock size={14} color="#94A3B8" style={styles.gridArrow} />
+                                    ) : (
+                                        <ChevronRight size={14} color={Colors.textLight} style={styles.gridArrow} />
+                                    )}
                                 </TouchableOpacity>
                             </Animated.View>
                         );
@@ -218,9 +229,11 @@ function StaffDashboard() {
             case 'contractor': return contractorDashboardItems;
             case 'watchman': return watchmanDashboardItems;
             default:
-                return (role === 'admin' && isGirlsHostel)
-                    ? adminDashboardItems.filter(item => item.key !== 'admission' && item.key !== 'reg-settings')
-                    : adminDashboardItems;
+                if (role !== 'admin') return adminDashboardItems;
+                const excludeKeys = isGirlsHostel 
+                    ? ['admission', 'reg-settings', 'mess', 'hostel'] 
+                    : ['mess', 'hostel'];
+                return adminDashboardItems.filter(item => !excludeKeys.includes(item.key));
         }
     }, [role, isGirlsHostel]);
 

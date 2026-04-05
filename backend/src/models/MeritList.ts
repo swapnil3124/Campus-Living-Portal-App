@@ -17,14 +17,14 @@ export interface IMeritList extends Document {
     }>;
     generatedAt: Date;
     settings: any;
-    status: 'draft' | 'published' | 'sent_to_rector';
+    status: 'draft' | 'pending' | 'published' | 'sent_to_rector';
     hostelName?: string;
 }
 
 const MeritListSchema: Schema = new Schema({
     title: { type: String, required: true },
     department: { type: String, required: true },
-    status: { type: String, enum: ['draft', 'published', 'sent_to_rector'], default: 'draft' },
+    status: { type: String, enum: ['draft', 'pending', 'published', 'sent_to_rector'], default: 'draft' },
     students: [{
         admissionId: { type: Schema.Types.ObjectId, ref: 'Admission' },
         fullName: String,

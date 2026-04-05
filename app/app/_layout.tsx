@@ -7,6 +7,8 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
 import { useAnnouncementStore } from '@/store/announcement-store';
+import { io } from 'socket.io-client';
+import { SOCKET_URL } from '@/constants/config';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,15 +21,35 @@ function RealTimePoller() {
     const fetchActiveAnnouncements = useAnnouncementStore(state => state.fetchActiveAnnouncements);
 
     useEffect(() => {
-        // Poll every 5 seconds to ensure real time changes
-        const interval = setInterval(() => {
+        const socket = io(SOCKET_URL, {
+            transports: ['websocket'], // Preferred for React Native
+        });
+
+        socket.on('connect', () => {
+            console.log('Socket attached real-time updates.');
+            // Initial fetch to ensure up-to-date data upon connection
             fetchAdmissions();
             fetchMeritLists();
             fetchAnnouncements();
             fetchActiveAnnouncements();
-        }, 5000);
+        });
 
-        return () => clearInterval(interval);
+        socket.on('admissions_updated', () => {
+            fetchAdmissions();
+        });
+
+        socket.on('merits_updated', () => {
+            fetchMeritLists();
+        });
+
+        socket.on('announcements_updated', () => {
+            fetchAnnouncements();
+            fetchActiveAnnouncements();
+        });
+
+        return () => {
+            socket.disconnect();
+        };
     }, [fetchAdmissions, fetchMeritLists, fetchAnnouncements, fetchActiveAnnouncements]);
 
     return null;

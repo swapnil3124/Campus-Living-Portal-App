@@ -34,9 +34,11 @@ export const studentLogin = async (req: Request, res: Response) => {
                 enrollmentId: student.enrollment,
                 email: student.email,
                 department: student.department,
+                gender: student.gender,
                 isRoomAllocated: student.isRoomAllocated,
                 allocatedRoom: student.allocatedRoom,
-                allocatedBed: student.allocatedBed
+                allocatedBed: student.allocatedBed,
+                status: student.status
             }
         });
     } catch (error: any) {

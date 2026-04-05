@@ -25,7 +25,7 @@ export const updateAdmission = async (req: Request, res: Response) => {
         const updatedAdmission = await Admission.findByIdAndUpdate(
             req.params.id,
             req.body,
-            { new: true }
+            { returnDocument: 'after' }
         );
         res.json(updatedAdmission);
     } catch (err: any) {

@@ -21,6 +21,8 @@ interface StoredAuth {
     subRole: string | null;
     isRoomAllocated?: boolean;
     watchmanId: string | null;
+    studentStatus?: string | null;
+    gender?: string | null;
 }
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -33,6 +35,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const [subRole, setSubRole] = useState<string | null>(null);
     const [isRoomAllocated, setIsRoomAllocated] = useState<boolean>(false);
     const [watchmanId, setWatchmanId] = useState<string | null>(null);
+    const [studentStatus, setStudentStatus] = useState<string | null>(null);
     const queryClient = useQueryClient();
 
     const authQuery = useQuery({
@@ -46,11 +49,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         },
     });
 
-    const fetchProfile = async () => {
-        if (!token || role !== 'student') return;
+    const fetchProfile = async (currentToken?: string, currentRole?: string) => {
+        const activeToken = currentToken || token;
+        const activeRole = currentRole || role;
+        
+        if (!activeToken || activeRole !== 'student') return;
         try {
             const response = await fetch(`${API_URL}/students/profile`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${activeToken}` }
             });
             const data = await response.json();
             if (response.ok && data.student) {
@@ -68,15 +74,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     category: s.category || 'Open',
                     isRoomAllocated: s.isRoomAllocated || false,
                     gender: s.gender || 'Male',
-                    hostelName: s.allocatedHostel || (s.gender === 'Female' 
-                        ? 'Jijau' 
-                        : (s.year?.includes('2nd') || s.year?.includes('Second') ? 'Lenyadri' : 
-                          s.year?.includes('3rd') || s.year?.includes('Third') ? 'Bhimashankar' : 'Shivneri')),
+                    // Use real allocated hostel; no fake fallback for girls
+                    hostelName: s.allocatedHostel || (
+                        s.gender === 'Female'
+                            ? null  // Girls choose their own hostel; don't fake it
+                            : (s.year?.includes('2nd') || s.year?.includes('Second') ? 'Lenyadri' :
+                               s.year?.includes('3rd') || s.year?.includes('Third') ? 'Bhimashankar' : 'Shivneri')
+                    ),
                     roomNo: s.allocatedRoom || 'N/A',
                     bedNumber: s.allocatedBed || 'N/A',
-                    floor: s.allocatedRoom ? parseInt(s.allocatedRoom[0]) || 1 : 1,
+                    // Floor: parse from room number (first digit: 1xx→0, 2xx→1, 3xx→2, 4xx→3)
+                    floor: s.allocatedRoom
+                        ? (parseInt(String(s.allocatedRoom)[0]) - 1) || 0
+                        : 0,
                     photoUrl: s.photoUrl || s.additionalData?.photoUrl || '',
-                    status: s.status === 'accepted' ? 'active' : 'pending',
+                    status: s.status === 'accepted' ? 'active' : (s.status === 'past' ? 'past' : 'pending'),
                     rollNo: s.enrollment,
                     prevMarks: s.prevMarks || 'N/A',
                     distance: s.distance || '0 km',
@@ -106,9 +118,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             setSubRole(authQuery.data.subRole || null);
             setIsRoomAllocated(authQuery.data.isRoomAllocated || false);
             setWatchmanId(authQuery.data.watchmanId || null);
+            setStudentStatus(authQuery.data.studentStatus || null);
             
             if (authQuery.data.isLoggedIn && authQuery.data.role === 'student') {
-                fetchProfile();
+                fetchProfile(authQuery.data.token || undefined, authQuery.data.role || undefined);
             }
         }
     }, [authQuery.data]);
@@ -165,7 +178,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                         userName: data.student.name,
                         subRole: null,
                         isRoomAllocated: data.student.isRoomAllocated || false,
-                        watchmanId: null
+                        watchmanId: null,
+                        studentStatus: data.student.status,
+                        // Store gender so routing works correctly at login
+                        gender: data.student.gender || null,
                     };
                     await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(authData));
                     return authData;
@@ -184,6 +200,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             setToken(data.token);
             setSubRole(data.subRole);
             setWatchmanId(data.watchmanId);
+            setStudentStatus(data.studentStatus || null);
             if (data.role === 'student') {
                 setStudent({ 
                     _id: data.studentId,
@@ -191,13 +208,20 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     name: data.userName, 
                     enrollmentNo: data.studentId 
                 } as any);
+                // Also fetch full profile
+                fetchProfile(data.token || undefined, data.role || undefined);
             }
             Alert.alert('Login Successful', `Welcome back, ${data.userName || 'User'}!`);
             queryClient.invalidateQueries({ queryKey: ['auth'] });
 
             // Navigate based on role and room allocation
-            if (data.role === 'student' && !data.isRoomAllocated) {
-                router.replace('/room-selection' as any);
+            if (data.role === 'student' && !data.isRoomAllocated && data.studentStatus !== 'past') {
+                const isGirl = (data.gender || '').toLowerCase() === 'female';
+                if (isGirl) {
+                    router.replace('/girls-room-selection' as any);
+                } else {
+                    router.replace('/room-selection' as any);
+                }
             } else {
                 router.replace('/(tabs)/dashboard' as any);
             }
@@ -221,6 +245,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             setSubRole(null);
             setIsRoomAllocated(false);
             setWatchmanId(null);
+            setStudentStatus(null);
             queryClient.invalidateQueries({ queryKey: ['auth'] });
         },
     });

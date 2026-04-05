@@ -91,15 +91,16 @@ export const getWardenComplaints = async (req: Request, res: Response): Promise<
 
         if (role === 'admin' && subRole) {
             const hName = subRole.toLowerCase();
-            if (['shivneri', 'lenyadri', 'bhimashankar', 'saraswati', 'shwetamber', 'shwetambara', 'jijau'].includes(hName)) {
+            if (['shivneri', 'lenyadri', 'bhimashankar', 'saraswati', 'shwetambar', 'shwetambara'].includes(hName)) {
                 query.hostelName = new RegExp(hName, 'i');
             }
         } else if (role === 'rector' && subRole) {
             const hName = subRole.toLowerCase();
             if (hName === 'girls') {
-                query.hostelName = { $regex: /saraswati|shwetamber|shwetambara|jijau/i };
+                // Saraswati and Shwetambar are the two girls hostels, plus catch generic 'girls'
+                query.hostelName = { $regex: /saraswati|shwetambar|shwetambara|girls/i };
             } else if (hName === 'boys') {
-                query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar/i };
+                query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar|boys/i };
             }
         } else {
             if (!hostelName) {
@@ -132,7 +133,7 @@ export const updateComplaintStatus = async (req: Request, res: Response): Promis
         const complaint = await Complaint.findByIdAndUpdate(
             complaintId,
             { status, wardenRemark, wardenId, updatedAt: new Date() },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!complaint) {

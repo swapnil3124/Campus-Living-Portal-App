@@ -28,19 +28,20 @@ interface AdmissionStore {
     };
     isLoading: boolean;
     error: string | null;
-    fetchAdmissions: (token?: string) => Promise<void>;
+    fetchAdmissions: (token?: string, year?: string) => Promise<void>;
     addAdmission: (admission: any) => Promise<boolean>;
     updateAdmission: (id: string, updates: Partial<Admission>, token?: string) => Promise<boolean>;
     deleteAdmission: (id: string, token?: string) => Promise<boolean>;
     getAdmissionById: (id: string, token?: string) => Promise<Admission | null>;
     fetchRegConfig: () => Promise<void>;
-    updateRegConfig: (updates: any) => Promise<boolean>;
+    updateRegConfig: (updates: any, token?: string) => Promise<boolean>;
     meritListSettings: {
         departmentSeats: Record<string, number>;
         categoryPercentages: Record<string, number>;
+        yearSeats?: Record<string, number>;
     };
-    fetchMeritListSettings: () => Promise<void>;
-    updateMeritListSettings: (settings: any, token?: string) => Promise<boolean>;
+    fetchMeritListSettings: (isGirls?: boolean) => Promise<void>;
+    updateMeritListSettings: (settings: any, token?: string, isGirls?: boolean) => Promise<boolean>;
     generateMeritList: (token?: string) => Promise<{ success: boolean; message: string }>;
     fetchMeritLists: (token?: string) => Promise<void>;
     publishMeritList: (id: string, hostelName: string, token?: string) => Promise<boolean>;
@@ -81,7 +82,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
     isLoading: false,
     error: null,
 
-    fetchAdmissions: async (token?: string) => {
+    fetchAdmissions: async (token?: string, year?: string) => {
         if (!token) return;
         if (get().admissions.length === 0) {
             set({ isLoading: true, error: null });
@@ -95,7 +96,12 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`${API_URL}/admissions`, {
+            let url = `${API_URL}/admissions`;
+            if (year) {
+                url += `?year=${year}`;
+            }
+
+            const response = await fetch(url, {
                 headers
             });
             if (!response.ok) throw new Error('Failed to fetch admissions');
@@ -106,7 +112,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }));
             set({ admissions: transformedData, isLoading: false });
         } catch (err: any) {
-            console.error('fetchAdmissions Error:', err);
+            console.warn('fetchAdmissions Error:', err);
             if (get().admissions.length === 0) {
                 set({ error: err.message, isLoading: false });
             }
@@ -191,11 +197,11 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
                 set({ regConfig: { ...data.value, pages } });
             }
         } catch (err) {
-            console.error('fetchRegConfig Error:', err);
+            console.warn('fetchRegConfig Error:', err);
         }
     },
 
-    updateRegConfig: async (updates) => {
+    updateRegConfig: async (updates, token?: string) => {
         set({ isLoading: true });
         try {
             const current = get().regConfig;
@@ -264,9 +270,12 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             newValue.pages = newValue.pages.filter((p: any) => !['fixed_personal_info', 'fixed_academic_info'].includes(p.id));
             newValue.pages = [fixedPersonal, fixedAcademic, ...newValue.pages];
 
+            const headers: any = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/config`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ key: 'registration', value: newValue }),
             });
             if (response.ok) {
@@ -276,7 +285,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             const errData = await response.json();
             throw new Error(errData.message || 'Failed to update config');
         } catch (err: any) {
-            console.error('updateRegConfig Error:', err);
+            console.warn('updateRegConfig Error:', err);
             set({ error: err.message, isLoading: false });
             return false;
         }
@@ -307,7 +316,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }));
             return true;
         } catch (err: any) {
-            console.error('addAdmission Error:', err);
+            console.warn('addAdmission Error:', err);
             set({ error: err.message, isLoading: false });
             return false;
         }
@@ -341,7 +350,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }));
             return true;
         } catch (err: any) {
-            console.error('updateAdmission Error:', err);
+            console.warn('updateAdmission Error:', err);
             set({ error: err.message, isLoading: false });
             return false;
         }
@@ -365,7 +374,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }));
             return true;
         } catch (err: any) {
-            console.error('deleteAdmission Error:', err);
+            console.warn('deleteAdmission Error:', err);
             set({ error: err.message, isLoading: false });
             return false;
         }
@@ -383,33 +392,35 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             const data = await response.json();
             return { ...data, id: data._id };
         } catch (err) {
-            console.error('getAdmissionById Error:', err);
+            console.warn('getAdmissionById Error:', err);
             return null;
         }
     },
 
-    fetchMeritListSettings: async () => {
+    fetchMeritListSettings: async (isGirls = false) => {
         try {
-            const response = await fetch(`${API_URL}/config/merit_list`);
+            const key = isGirls ? 'girls_merit_list_config' : 'merit_list';
+            const response = await fetch(`${API_URL}/config/${key}`);
             if (response.ok) {
                 const data = await response.json();
                 set({ meritListSettings: data.value });
             }
         } catch (err) {
-            console.error('fetchMeritListSettings Error:', err);
+            console.warn('fetchMeritListSettings Error:', err);
         }
     },
 
-    updateMeritListSettings: async (settings, token) => {
+    updateMeritListSettings: async (settings, token, isGirls = false) => {
         set({ isLoading: true });
         try {
+            const key = isGirls ? 'girls_merit_list_config' : 'merit_list';
             const headers: any = { 'Content-Type': 'application/json' };
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
             const response = await fetch(`${API_URL}/config`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ key: 'merit_list', value: settings }),
+                body: JSON.stringify({ key, value: settings }),
             });
             if (response.ok) {
                 set({ meritListSettings: settings, isLoading: false });
@@ -417,7 +428,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }
             throw new Error('Failed to update merit list settings');
         } catch (err: any) {
-            console.error('updateMeritListSettings Error:', err);
+            console.warn('updateMeritListSettings Error:', err);
             set({ error: err.message, isLoading: false });
             return false;
         }
@@ -439,7 +450,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
                 set({ meritLists: data });
             }
         } catch (err) {
-            console.error('fetchMeritLists Error:', err);
+            console.warn('fetchMeritLists Error:', err);
         }
     },
 
@@ -463,7 +474,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }
             throw new Error(data.message || 'Failed to generate merit list');
         } catch (err: any) {
-            console.error('generateMeritList Error:', err);
+            console.warn('generateMeritList Error:', err);
             set({ isLoading: false });
             return { success: false, message: err.message };
         }
@@ -488,7 +499,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }
             return true;
         } catch (err: any) {
-            console.error('publishMeritList Error:', err.message || err);
+            console.warn('publishMeritList Error:', err.message || err);
             return false;
         }
     },
@@ -513,7 +524,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
 
             return true;
         } catch (err: any) {
-            console.error('sendToRector Error:', err.message || err);
+            console.warn('sendToRector Error:', err.message || err);
             return false;
         }
     },
@@ -537,7 +548,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }
             return { success: true, passwords: responseData.passwords };
         } catch (err: any) {
-            console.error('generatePasswords Error:', err.message || err);
+            console.warn('generatePasswords Error:', err.message || err);
             return { success: false };
         }
     },
@@ -561,15 +572,19 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }
             return { success: true, message: data.message };
         } catch (err: any) {
-            console.error('sendEmails Error:', err.message || err);
+            console.warn('sendEmails Error:', err.message || err);
             return { success: false, message: err.message };
         }
     },
 
-    deleteMeritList: async (id: string) => {
+    deleteMeritList: async (id: string, token?: string) => {
         try {
+            const headers: any = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(`${API_URL}/merit/${id}`, {
                 method: 'DELETE',
+                headers
             });
             if (response.ok) {
                 set((state) => ({
@@ -579,7 +594,7 @@ export const useAdmissionStore = create<AdmissionStore>((set, get) => ({
             }
             throw new Error('Failed to delete merit list');
         } catch (err) {
-            console.error('deleteMeritList Error:', err);
+            console.warn('deleteMeritList Error:', err);
             return false;
         }
     },

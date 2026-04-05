@@ -30,7 +30,7 @@ export const useLeaveStore = create<LeaveState>((set, get) => ({
             
             set({ leaves: mappedData, isLoading: false });
         } catch (error) {
-            console.error('Error fetching student leaves:', error);
+            console.warn('Error fetching student leaves:', error);
             set({ leaves: [], isLoading: false });
         }
     },
@@ -55,7 +55,7 @@ export const useLeaveStore = create<LeaveState>((set, get) => ({
             
             set({ leaves: mappedData, isLoading: false });
         } catch (error) {
-            console.error('Error fetching warden leaves:', error);
+            console.warn('Error fetching warden leaves:', error);
             set({ leaves: [], isLoading: false });
         }
     },
@@ -84,7 +84,7 @@ export const useLeaveStore = create<LeaveState>((set, get) => ({
                 isLoading: false
             }));
         } catch (error) {
-            console.error('Error updating leave status:', error);
+            console.warn('Error updating leave status:', error);
             set({ isLoading: false });
         }
     },
@@ -100,7 +100,7 @@ export const useLeaveStore = create<LeaveState>((set, get) => ({
 
             if (!response.ok) {
                 const errBody = await response.json().catch(() => ({}));
-                console.error('addLeave server error:', errBody);
+                console.warn('addLeave server error:', errBody);
                 throw new Error(errBody.error || 'Failed to add leave');
             }
 
@@ -112,7 +112,7 @@ export const useLeaveStore = create<LeaveState>((set, get) => ({
                 isLoading: false
             }));
         } catch (error) {
-            console.error('Error adding leave:', error);
+            console.warn('Error adding leave:', error);
             set({ isLoading: false });
             throw error;
         }

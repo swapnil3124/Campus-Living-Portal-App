@@ -119,13 +119,11 @@ export default function StudentNoticesScreen() {
     const [viewerType, setViewerType] = useState<'image' | 'pdf' | 'other'>('image');
 
     const fetchNotices = useCallback(async () => {
-        if (!student?.hostelName) {
-            setLoading(false);
-            return;
-        }
+        const activeHostel = student?.hostelName || (student?.gender?.toLowerCase() === 'female' ? 'girls' : 'boys');
+        
         try {
             setLoading(true);
-            const response = await fetch(`${API_URL}/notices?hostelName=${encodeURIComponent(student.hostelName)}&studentOnly=true`);
+            const response = await fetch(`${API_URL}/notices?hostelName=${encodeURIComponent(activeHostel)}&studentOnly=true`);
             const data = await response.json();
             if (Array.isArray(data)) {
                 setNotices(data);
@@ -260,6 +258,12 @@ export default function StudentNoticesScreen() {
             <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
                 {loading ? (
                     <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+                ) : student?.status === 'past' ? (
+                    <View style={styles.emptyState}>
+                        <Bell size={64} color={Colors.error} />
+                        <Text style={styles.emptyTitle}>Access Denied</Text>
+                        <Text style={styles.emptyText}>Internal hostel-specific notices are only available for currently active residents. Please check the public notice board for general announcements.</Text>
+                    </View>
                 ) : filteredNotices.length > 0 ? (
                     filteredNotices.map((notice, index) => (
                         <NoticeCard 

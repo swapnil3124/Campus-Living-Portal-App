@@ -48,8 +48,8 @@ export const initializeStaff = async () => {
                 staffId: 'WRDSHWE1051',
                 password: 'Shwe@WRD1051',
                 role: 'admin' as const,
-                subRole: 'shwetambara' as const,
-                name: 'Shwetambara Hostel Warden'
+                subRole: 'shwetambar' as const,
+                name: 'Shwetambar Hostel Warden'
             },
             {
                 staffId: 'WRDSARA1051',
@@ -97,12 +97,19 @@ export const initializeStaff = async () => {
                 await newStaff.save();
                 console.log(`Initialized account for: ${data.staffId}`);
             } else {
-                // Enforce the requested credentials and metadata
-                existing.password = data.password;
-                existing.role = data.role as any;
-                existing.subRole = data.subRole;
-                existing.name = data.name;
-                await existing.save();
+                // Enforce the requested credentials and metadata only if changed
+                const isMatch = await existing.comparePassword(data.password);
+                const roleMatches = existing.role === data.role;
+                const subRoleMatches = existing.subRole === data.subRole;
+                const nameMatches = existing.name === data.name;
+
+                if (!isMatch || !roleMatches || !subRoleMatches || !nameMatches) {
+                    existing.password = data.password;
+                    existing.role = data.role as any;
+                    existing.subRole = data.subRole;
+                    existing.name = data.name;
+                    await existing.save();
+                }
             }
         }
     } catch (error: any) {

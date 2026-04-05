@@ -29,6 +29,33 @@ const getSeedData = (hostelName: string) => [
     }))
 ];
 
+// Girls hostel: 3 floors × 12 rooms (101-112, 201-212, 301-312), 4 beds each
+const getSeedDataGirls = (hostelName: string) => [
+    // Ground floor: 101–112
+    ...Array.from({ length: 12 }, (_, i) => ({
+        hostelName,
+        roomNumber: `${101 + i}`,
+        floor: 0,
+        beds: [{ bedNumber: 1 }, { bedNumber: 2 }, { bedNumber: 3 }, { bedNumber: 4 }]
+    })),
+    // 1st floor: 201–212
+    ...Array.from({ length: 12 }, (_, i) => ({
+        hostelName,
+        roomNumber: `${201 + i}`,
+        floor: 1,
+        beds: [{ bedNumber: 1 }, { bedNumber: 2 }, { bedNumber: 3 }, { bedNumber: 4 }]
+    })),
+    // 2nd floor: 301–312
+    ...Array.from({ length: 12 }, (_, i) => ({
+        hostelName,
+        roomNumber: `${301 + i}`,
+        floor: 2,
+        beds: [{ bedNumber: 1 }, { bedNumber: 2 }, { bedNumber: 3 }, { bedNumber: 4 }]
+    })),
+];
+
+const GIRLS_HOSTELS = ['saraswati', 'shwetambar', 'shwetambara', 'jijau', 'girls'];
+
 export const getRooms = async (req: Request, res: Response) => {
     try {
         let { hostelName } = req.query;
@@ -42,7 +69,9 @@ export const getRooms = async (req: Request, res: Response) => {
         // Seeding if no rooms exist
         if (rooms.length === 0) {
             console.log(`Seeding rooms for ${hostelName}...`);
-            await Room.insertMany(getSeedData(hostelName as string));
+            const isGirls = GIRLS_HOSTELS.includes((hostelName as string).toLowerCase());
+            const seed = isGirls ? getSeedDataGirls(hostelName as string) : getSeedData(hostelName as string);
+            await Room.insertMany(seed);
             rooms = await Room.find({ hostelName }).sort({ floor: 1, roomNumber: 1 });
         }
         
@@ -85,7 +114,7 @@ export const bookBed = async (req: Request, res: Response) => {
                     'beds.$.studentId': studentId
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!room) {
@@ -128,7 +157,7 @@ export const unbookBed = async (req: Request, res: Response): Promise<any> => {
                     "beds.$.studentId": null
                 }
             },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         // 2. Reset Student

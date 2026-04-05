@@ -146,6 +146,21 @@ export default function RoomSelectionScreen() {
         );
     };
 
+    if (student?.status === 'past') {
+        return (
+            <SafeAreaView style={styles.centerContainer}>
+                <Text style={styles.headerTitle}>Access Denied</Text>
+                <Text style={styles.loadingText}>You have exited the hostel and cannot select a room.</Text>
+                <TouchableOpacity 
+                    style={[styles.btn, styles.confirmBtn, { marginTop: 24, paddingVertical: 12, paddingHorizontal: 24 }]}
+                    onPress={() => router.replace('/(tabs)/dashboard' as any)}
+                >
+                    <Text style={styles.confirmBtnText}>Return to Dashboard</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
+
     if (loading) {
         return (
             <View style={styles.centerContainer}>

@@ -54,10 +54,19 @@ export const getHostelNotices = async (req: Request, res: Response): Promise<any
             return res.status(400).json({ error: 'Hostel name is required' });
         }
 
-        const query: any = { 
-            hostelName: hostelName as string,
-            isActive: true 
-        };
+        const hName = (hostelName as string).toLowerCase().trim();
+
+        const query: any = { isActive: true };
+
+        // Support rector-level compound queries or individual hostel queries
+        if (hName === 'girls') {
+            query.hostelName = { $regex: /saraswati|shwetambar|girls/i };
+        } else if (hName === 'boys') {
+            query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar|boys/i };
+        } else {
+            // Individual hostel warden — case-insensitive exact match
+            query.hostelName = new RegExp(`^${hostelName as string}$`, 'i');
+        }
 
         if (studentOnly === 'true') {
             query.publishToStudents = true;
@@ -78,7 +87,7 @@ export const updateNotice = async (req: Request, res: Response): Promise<any> =>
         const { noticeId } = req.params;
         const updates = req.body;
 
-        const updatedNotice = await Notice.findByIdAndUpdate(noticeId, updates, { new: true });
+        const updatedNotice = await Notice.findByIdAndUpdate(noticeId, updates, { returnDocument: 'after' });
         
         if (!updatedNotice) {
             return res.status(404).json({ error: 'Notice not found' });

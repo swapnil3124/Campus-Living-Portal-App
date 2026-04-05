@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Announcement } from '../models/Announcement';
 import MeritList from '../models/MeritList';
+import { getIO } from '../socket';
 
 export const getAnnouncements = async (req: Request, res: Response) => {
     try {
@@ -46,6 +47,7 @@ export const createAnnouncement = async (req: Request, res: Response) => {
             createdBy
         });
         await announcement.save();
+        getIO().emit('announcements_updated');
         res.status(201).json(announcement);
     } catch (error) {
         res.status(500).json({ message: 'Error creating announcement', error });
@@ -55,7 +57,8 @@ export const createAnnouncement = async (req: Request, res: Response) => {
 export const updateAnnouncement = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const announcement = await Announcement.findByIdAndUpdate(id, req.body, { new: true });
+        const announcement = await Announcement.findByIdAndUpdate(id, req.body, { returnDocument: 'after' });
+        getIO().emit('announcements_updated');
         res.status(200).json(announcement);
     } catch (error) {
         res.status(500).json({ message: 'Error updating announcement', error });
@@ -79,6 +82,7 @@ export const deleteAnnouncement = async (req: Request, res: Response) => {
             }
         }
 
+        getIO().emit('announcements_updated');
         res.status(200).json({ message: 'Announcement deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: 'Error deleting announcement', error });

@@ -17,3 +17,10 @@ export const getBaseUrl = () => {
 };
 
 export const API_URL = getBaseUrl();
+
+export const getSocketUrl = () => {
+    const api = getBaseUrl();
+    return api.replace('/api', '');
+};
+
+export const SOCKET_URL = getSocketUrl();

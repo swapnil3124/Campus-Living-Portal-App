@@ -5,18 +5,22 @@ import MeritList from '../models/MeritList';
 import { Announcement } from '../models/Announcement';
 import * as xlsx from 'xlsx';
 import { sendStudentLoginCredentials } from '../utils/emailService';
+import { getIO } from '../socket';
 
 export const generateMeritList = async (req: Request, res: Response) => {
     try {
         const user = (req as any).user;
         const { role, subRole } = user;
         
-        const config = await SystemConfig.findOne({ key: 'merit_list' });
+        const isGirlsSide = role === 'rector' && subRole?.toLowerCase() === 'girls';
+        const configKey = isGirlsSide ? 'girls_merit_list_config' : 'merit_list';
+        
+        const config = await SystemConfig.findOne({ key: configKey });
         if (!config) {
             return res.status(400).json({ message: 'Merit list settings not found' });
         }
 
-        const { departmentSeats, categoryPercentages } = config.value;
+        const { departmentSeats, categoryPercentages, yearSeats } = config.value;
 
         // Apply strict filtering based on warden scope
         let query: any = { status: 'accepted' };
@@ -48,40 +52,44 @@ export const generateMeritList = async (req: Request, res: Response) => {
         }
 
         const admissions = await Admission.find(query)
-            .select('fullName enrollment prevMarks department category year gender _id');
+            .select('fullName enrollment prevMarks department category year gender email _id');
 
         if (admissions.length === 0) {
             return res.status(400).json({ message: 'No registered students found to analyze.' });
         }
 
         const results = [];
-        const departments = Object.keys(departmentSeats);
+        const yearCounters: Record<string, number> = { '1st': 0, '2nd': 0, '3rd': 0 };
 
-        for (const dept of departments) {
-            const totalDeptSeats = departmentSeats[dept];
-            if (!totalDeptSeats || totalDeptSeats <= 0) continue;
+        if (isGirlsSide && yearSeats) {
+            // GIRLS SIDE: Year-wise generation
+            const years = ['1st', '2nd', '3rd'];
 
-            // Filter students specifically for this department and sort by marks
-            const deptAdmissions = admissions
-                .filter(a => a.department === dept)
-                .sort((a, b) => {
-                    const marksA = parseFloat(a.prevMarks) || 0;
-                    const marksB = parseFloat(b.prevMarks) || 0;
-                    return marksB - marksA;
-                });
+            for (const year of years) {
+                const totalYearSeats = yearSeats[year] || 0;
+                if (totalYearSeats <= 0) continue;
 
-            if (deptAdmissions.length === 0) continue;
+                // Filter students specifically for this year and sort by marks
+                const yearAdmissions = admissions
+                    .filter(a => a.year === year)
+                    .sort((a, b) => {
+                        const marksA = parseFloat(a.prevMarks) || 0;
+                        const marksB = parseFloat(b.prevMarks) || 0;
+                        return marksB - marksA;
+                    });
 
-            const selectedStudents: any[] = [];
-            const remainingAdmissions = [...deptAdmissions];
+                if (yearAdmissions.length === 0) continue;
 
-            // 1. Fill Open Category first (based on percentage of department seats)
-            const openPercentage = categoryPercentages?.['Open'] || 0;
-            const openSeatsCount = Math.floor((totalDeptSeats * openPercentage) / 100);
+                const selectedStudents: any[] = [];
+                const remainingAdmissions = [...yearAdmissions];
 
-            for (let i = 0; i < openSeatsCount && remainingAdmissions.length > 0 && selectedStudents.length < totalDeptSeats; i++) {
-                const student = remainingAdmissions.shift();
-                if (student) {
+                // 1. Fill Open Category
+                const openPercentage = categoryPercentages?.['Open'] || 0;
+                const openSeatsCount = Math.floor((totalYearSeats * openPercentage) / 100);
+
+                for (let i = 0; i < remainingAdmissions.length && selectedStudents.length < openSeatsCount && selectedStudents.length < totalYearSeats; i++) {
+                    const student = remainingAdmissions[i];
+                    remainingAdmissions.splice(i, 1);
                     selectedStudents.push({
                         admissionId: student._id,
                         fullName: student.fullName,
@@ -91,46 +99,46 @@ export const generateMeritList = async (req: Request, res: Response) => {
                         rank: selectedStudents.length + 1,
                         selectionCategory: 'Open',
                         year: student.year,
-                        gender: student.gender
+                        gender: student.gender,
+                        email: student.email
                     });
+                    i--;
                 }
-            }
 
-            // 2. Fill Reserved Categories (based on percentage per category)
-            const otherCategories = Object.keys(categoryPercentages || {}).filter(c => c !== 'Open');
+                // 2. Fill Reserved Categories
+                const otherCategories = Object.keys(categoryPercentages || {}).filter(c => c !== 'Open');
 
-            for (const cat of otherCategories) {
-                const catPct = categoryPercentages[cat] || 0;
-                const catSeatsCount = Math.floor((totalDeptSeats * catPct) / 100);
-                let filled = 0;
+                for (const cat of otherCategories) {
+                    const catPct = categoryPercentages[cat] || 0;
+                    const catSeatsLimit = Math.floor((totalYearSeats * catPct) / 100);
+                    let filled = 0;
 
-                // Find students of this category in the remaining pool
-                for (let i = 0; i < remainingAdmissions.length && filled < catSeatsCount && selectedStudents.length < totalDeptSeats; i++) {
-                    if (remainingAdmissions[i].category === cat) {
-                        const student = remainingAdmissions.splice(i, 1)[0];
-                        selectedStudents.push({
-                            admissionId: student._id,
-                            fullName: student.fullName,
-                            enrollment: student.enrollment,
-                            prevMarks: parseFloat(student.prevMarks),
-                            category: student.category,
-                            rank: selectedStudents.length + 1,
-                            selectionCategory: cat,
-                            year: student.year,
-                            gender: student.gender
-                        });
-                        filled++;
-                        i--; // Adjust index after splice
+                    for (let i = 0; i < remainingAdmissions.length && filled < catSeatsLimit && selectedStudents.length < totalYearSeats; i++) {
+                        if (remainingAdmissions[i].category === cat) {
+                            const student = remainingAdmissions.splice(i, 1)[0];
+                            selectedStudents.push({
+                                admissionId: student._id,
+                                fullName: student.fullName,
+                                enrollment: student.enrollment,
+                                prevMarks: parseFloat(student.prevMarks),
+                                category: student.category,
+                                rank: selectedStudents.length + 1,
+                                selectionCategory: cat,
+                                year: student.year,
+                                gender: student.gender,
+                                email: student.email
+                            });
+                            filled++;
+                            i--;
+                        }
                     }
                 }
-            }
 
-            // 3. Fill remaining slots in the Department (if any) with Merit students 
-            // who haven't been selected yet (from the remaining pool)
-            if (selectedStudents.length < totalDeptSeats) {
-                while (selectedStudents.length < totalDeptSeats && remainingAdmissions.length > 0) {
-                    const student = remainingAdmissions.shift();
-                    if (student) {
+                // 3. Fill remaining slots
+                if (selectedStudents.length < totalYearSeats) {
+                    for (let i = 0; i < remainingAdmissions.length && selectedStudents.length < totalYearSeats; i++) {
+                        const student = remainingAdmissions[i];
+                        remainingAdmissions.splice(i, 1);
                         selectedStudents.push({
                             admissionId: student._id,
                             fullName: student.fullName,
@@ -140,33 +148,140 @@ export const generateMeritList = async (req: Request, res: Response) => {
                             rank: selectedStudents.length + 1,
                             selectionCategory: 'Merit-Remaining',
                             year: student.year,
-                            gender: student.gender
+                            gender: student.gender,
+                            email: student.email
                         });
+                        i--;
                     }
                 }
+
+                const now = new Date();
+                const dateStr = now.toLocaleDateString();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const title = `Girls Merit List - ${year} Year (${dateStr} ${timeStr})`;
+
+                const newList = new MeritList({
+                    title,
+                    department: `${year} Year`, // For girls we use year as department
+                    students: selectedStudents,
+                    settings: config.value,
+                    hostelName: 'Girls', // General girls label
+                    status: 'pending' // Set to pending for manual publish
+                });
+                await newList.save();
+                results.push(newList);
             }
+        } else {
+            // BOYS SIDE or fallback: Department-wise generation
+            const departments = Object.keys(departmentSeats);
+            for (const dept of departments) {
+                const totalDeptSeats = departmentSeats[dept];
+                if (!totalDeptSeats || totalDeptSeats <= 0) continue;
 
-            // Save this department's merit list
-            // Clean up old lists for this department if they exist? 
-            // (The user said "remove all errors if comes" and "remind cast seat count is same for all depart ment")
+                const deptAdmissions = admissions
+                    .filter(a => a.department === dept)
+                    .sort((a, b) => {
+                        const marksA = parseFloat(a.prevMarks) || 0;
+                        const marksB = parseFloat(b.prevMarks) || 0;
+                        return marksB - marksA;
+                    });
 
-            // Generate unique title with timestamp
-            const now = new Date();
-            const dateStr = now.toLocaleDateString();
-            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const title = `Merit List - ${dept} (${dateStr} ${timeStr})`;
+                if (deptAdmissions.length === 0) continue;
 
-            const newList = new MeritList({
-                title,
-                department: dept,
-                students: selectedStudents,
-                settings: config.value,
-                hostelName: subRole || 'General'
-            });
-            await newList.save();
-            results.push(newList);
+                const selectedStudents: any[] = [];
+                const remainingAdmissions = [...deptAdmissions];
+
+                // 1. Fill Open Category
+                const openPercentage = categoryPercentages?.['Open'] || 0;
+                const openSeatsCount = Math.floor((totalDeptSeats * openPercentage) / 100);
+
+                for (let i = 0; i < remainingAdmissions.length && selectedStudents.length < openSeatsCount && selectedStudents.length < totalDeptSeats; i++) {
+                    const student = remainingAdmissions[i];
+                    remainingAdmissions.splice(i, 1);
+                    selectedStudents.push({
+                        admissionId: student._id,
+                        fullName: student.fullName,
+                        enrollment: student.enrollment,
+                        prevMarks: parseFloat(student.prevMarks),
+                        category: student.category,
+                        rank: selectedStudents.length + 1,
+                        selectionCategory: 'Open',
+                        year: student.year,
+                        gender: student.gender,
+                        email: student.email
+                    });
+                    i--;
+                }
+
+                // 2. Fill Reserved Categories
+                const otherCategories = Object.keys(categoryPercentages || {}).filter(c => c !== 'Open');
+
+                for (const cat of otherCategories) {
+                    const catPct = categoryPercentages[cat] || 0;
+                    const catSeatsLimit = Math.floor((totalDeptSeats * catPct) / 100);
+                    let filled = 0;
+
+                    for (let i = 0; i < remainingAdmissions.length && filled < catSeatsLimit && selectedStudents.length < totalDeptSeats; i++) {
+                        if (remainingAdmissions[i].category === cat) {
+                            const student = remainingAdmissions.splice(i, 1)[0];
+                            selectedStudents.push({
+                                admissionId: student._id,
+                                fullName: student.fullName,
+                                enrollment: student.enrollment,
+                                prevMarks: parseFloat(student.prevMarks),
+                                category: student.category,
+                                rank: selectedStudents.length + 1,
+                                selectionCategory: cat,
+                                year: student.year,
+                                gender: student.gender,
+                                email: student.email
+                            });
+                            filled++;
+                            i--;
+                        }
+                    }
+                }
+
+                // 3. Fill remaining slots
+                if (selectedStudents.length < totalDeptSeats) {
+                    for (let i = 0; i < remainingAdmissions.length && selectedStudents.length < totalDeptSeats; i++) {
+                        const student = remainingAdmissions[i];
+                        remainingAdmissions.splice(i, 1);
+                        selectedStudents.push({
+                            admissionId: student._id,
+                            fullName: student.fullName,
+                            enrollment: student.enrollment,
+                            prevMarks: parseFloat(student.prevMarks),
+                            category: student.category,
+                            rank: selectedStudents.length + 1,
+                            selectionCategory: 'Merit-Remaining',
+                            year: student.year,
+                            gender: student.gender,
+                            email: student.email
+                        });
+                        i--;
+                    }
+                }
+
+                const now = new Date();
+                const dateStr = now.toLocaleDateString();
+                const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const title = `Merit List - ${dept} (${dateStr} ${timeStr})`;
+
+                const newList = new MeritList({
+                    title,
+                    department: dept,
+                    students: selectedStudents,
+                    settings: config.value,
+                    hostelName: subRole || 'General',
+                    status: 'pending'
+                });
+                await newList.save();
+                results.push(newList);
+            }
         }
 
+        getIO().emit('merits_updated');
         res.json({ message: 'Merit lists generated successfully', lists: results });
     } catch (error: any) {
         console.error('Generation Error:', error);
@@ -185,9 +300,10 @@ export const getMeritLists = async (req: Request, res: Response) => {
         } else if (user.role === 'rector' && user.subRole) {
             // Rector sees either boys or girls lists
             if (user.subRole === 'boys') {
-                query.hostelName = { $in: ['shivneri', 'lenyadri', 'bhimashankar'] };
+                query.hostelName = { $in: ['shivneri', 'lenyadri', 'bhimashankar', 'boys', 'Shivneri', 'Lenyadri', 'Bhimashankar', 'Boys'] };
             } else if (user.subRole === 'girls') {
-                query.hostelName = { $in: ['saraswati', 'shwetambara', 'shwetamber', 'jijau'] };
+                // Girls lists are saved with hostelName: 'Girls' by the rector
+                query.hostelName = { $in: ['saraswati', 'shwetambara', 'shwetamber', 'jijau', 'girls', 'Girls'] };
             }
         }
 
@@ -230,7 +346,21 @@ export const publishMeritList = async (req: Request, res: Response) => {
         await list.save();
 
         if (!existingAnnouncement) {
-            // Create an announcement automatically using the Hostel Name
+            // Generate filename for the URL to help browser recognition
+            const currentYear = new Date().getFullYear();
+            const cleanHostelName = hostelName.replace(/\s+/g, '_');
+            const isGirlsHostel = ['saraswati', 'shwetambara', 'shwetamber', 'girls'].some(h => hostelName.toLowerCase().includes(h));
+            
+            let excelFilename = `${cleanHostelName}_Merit_List_${currentYear}.xlsx`;
+            if (isGirlsHostel) {
+                // For girls, use Year_Wise as per prompt if it's a general list, otherwise use hostel name
+                const isYearBased = ['1st', '2nd', '3rd'].some(y => hostelName.includes(y));
+                excelFilename = isYearBased 
+                    ? `${cleanHostelName}_Year_Girls_Merit_List_${currentYear}.xlsx`
+                    : `Year_Wise_Girls_Merit_List_${currentYear}.xlsx`;
+            }
+
+            // Create an announcement automatically with a path-based download link for better browser handling
             const announcement = new Announcement({
                 message: title,
                 details: `The merit list for ${hostelName} Hostel has been published. Selected students, please check the downloadable list attached.`,
@@ -238,11 +368,14 @@ export const publishMeritList = async (req: Request, res: Response) => {
                 endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // Active for 15 days
                 isActive: true,
                 createdBy: 'System (Rector)',
-                fileUrl: `/api/merit/hostel/export?hostelName=${encodeURIComponent(hostelName)}`
+                // Add filename to the URL to ensure it downloads as .xlsx on mobile/browser
+                fileUrl: `/api/merit/hostel/export/${encodeURIComponent(excelFilename)}?hostelName=${encodeURIComponent(hostelName)}`
             });
             await announcement.save();
+            getIO().emit('announcements_updated');
         }
 
+        getIO().emit('merits_updated');
         res.json({ message: 'Merit list published successfully' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -292,9 +425,16 @@ export const exportMeritList = async (req: Request, res: Response) => {
         xlsx.utils.book_append_sheet(wb, ws, "Merit List");
 
         const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
-        const cleanHostelName = (hostel as string || list.department).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const currentYear = new Date().getFullYear();
+        const rawName = (hostel as string || list.department || 'Merit');
+        const cleanName = rawName.replace(/\s+/g, '_');
 
-        res.setHeader('Content-Disposition', `attachment; filename="${cleanHostelName}_Merit_List.xlsx"`);
+        const yearBased = ['1st', '2nd', '3rd'].some(y => rawName.startsWith(y));
+        const excelFilename = yearBased
+            ? `${cleanName}_Year_Girls_Merit_List_${currentYear}.xlsx`
+            : `${cleanName}_Merit_List_${currentYear}.xlsx`;
+
+        res.setHeader('Content-Disposition', `attachment; filename="${excelFilename}"`);
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.send(buf);
     } catch (error: any) {
@@ -349,9 +489,16 @@ export const exportHostelWiseMeritList = async (req: Request, res: Response) => 
         xlsx.utils.book_append_sheet(wb, ws, "Merit List");
 
         const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
-        const cleanHostelName = (hostelName as string).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const currentYear = new Date().getFullYear();
+        const cleanName = (hostelName as string).replace(/\s+/g, '_');
 
-        res.setHeader('Content-Disposition', `attachment; filename="${cleanHostelName}_Merit_List.xlsx"`);
+        // Build a descriptive filename
+        const yearBased = ['1st', '2nd', '3rd'].some(y => (hostelName as string).startsWith(y));
+        const excelFilename = yearBased
+            ? `${cleanName}_Year_Girls_Merit_List_${currentYear}.xlsx`
+            : `${cleanName}_Merit_List_${currentYear}.xlsx`;
+
+        res.setHeader('Content-Disposition', `attachment; filename="${excelFilename}"`);
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.send(buf);
     } catch (error: any) {
@@ -367,6 +514,7 @@ export const sendToRector = async (req: Request, res: Response) => {
         list.status = 'sent_to_rector';
         await list.save();
 
+        getIO().emit('merits_updated');
         res.json({ message: 'Merit list sent to rector' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
@@ -376,6 +524,7 @@ export const sendToRector = async (req: Request, res: Response) => {
 export const deleteMeritList = async (req: Request, res: Response) => {
     try {
         await MeritList.findByIdAndDelete(req.params.id);
+        getIO().emit('merits_updated');
         res.json({ message: 'Merit list deleted' });
     } catch (error: any) {
         res.status(500).json({ message: error.message });
