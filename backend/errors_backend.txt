@@ -1,0 +1,2 @@
+src/socket.ts(1,42): error TS2307: Cannot find module 'socket.io' or its corresponding type declarations.
+src/socket.ts(14,26): error TS7006: Parameter 'socket' implicitly has an 'any' type.

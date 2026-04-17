@@ -1,17 +1,17 @@
-import { Server as SocketIOServer } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import http from 'http';
 
-let io: SocketIOServer;
+let io: Server;
 
 export const initSocket = (server: http.Server) => {
-    io = new SocketIOServer(server, {
+    io = new Server(server, {
         cors: {
             origin: '*',
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
         }
     });
 
-    io.on('connection', (socket) => {
+    io.on('connection', (socket: Socket) => {
         console.log('A user connected:', socket.id);
 
         socket.on('disconnect', () => {

@@ -7,7 +7,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import Colors from '@/constants/colors';
 import { useAdmissionStore } from '@/store/admission-store';
 import { useAnnouncementStore } from '@/store/announcement-store';
-import { io } from 'socket.io-client';
+import io from 'socket.io-client';
 import { SOCKET_URL } from '@/constants/config';
 
 SplashScreen.preventAutoHideAsync();

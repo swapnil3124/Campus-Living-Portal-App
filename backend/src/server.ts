@@ -1,3 +1,4 @@
+// Server entry point for Campus Living Portal Backend
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
