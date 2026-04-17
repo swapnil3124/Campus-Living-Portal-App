@@ -12,9 +12,12 @@ import {
     FlatList,
     Animated,
     Dimensions,
-    Image,
     Switch,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { KeyboardWrapper } from '@/components/KeyboardWrapper';
+import Layout, { moderateScale, scale } from '@/constants/layout';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -37,7 +40,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SCREEN_WIDTH = Layout.window.width;
+
 
 export default function RegistrationScreen() {
     const insets = useSafeAreaInsets();
@@ -362,6 +366,7 @@ export default function RegistrationScreen() {
                                 <Image
                                     source={{ uri: fileData.base64 || fileData.uri }}
                                     style={{ width: 60, height: 60, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' }}
+                                    contentFit="cover"
                                 />
                             )}
                             <Text style={[styles.inputText, !value && { color: Colors.textLight }]}>
@@ -468,13 +473,13 @@ export default function RegistrationScreen() {
                 </View>
             </LinearGradient>
 
-            <ScrollView
+            <KeyboardWrapper 
+                style={styles.flex} 
                 contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-                showsVerticalScrollIndicator={false}
             >
                 {renderProgressBar()}
 
-                <View style={styles.card}>
+                <View style={[styles.card, styles.responsiveCard]}>
                     <View style={styles.pageInfo}>
                         <Text style={styles.pageTitle}>{currentPage.title}</Text>
                         {currentPage.description ? <Text style={styles.pageDesc}>{currentPage.description}</Text> : null}
@@ -484,7 +489,8 @@ export default function RegistrationScreen() {
                         {currentPage.fields.map(field => renderField(field))}
                     </View>
                 </View>
-            </ScrollView>
+            </KeyboardWrapper>
+
 
             {/* Footer Navigation */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
@@ -642,6 +648,12 @@ const styles = StyleSheet.create({
         color: Colors.primary,
     },
 
+    flex: { flex: 1 },
+    responsiveCard: {
+        maxWidth: 600,
+        alignSelf: 'center',
+        width: SCREEN_WIDTH > 600 ? 600 : SCREEN_WIDTH - 32,
+    },
     card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 24, padding: 20, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12 },
     pageInfo: { marginBottom: 24, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: 16 },
     pageTitle: { fontSize: 20, fontWeight: '900', color: Colors.text, textTransform: 'capitalize' },
@@ -671,3 +683,4 @@ const styles = StyleSheet.create({
     optionText: { fontSize: 15, color: Colors.textSecondary, fontWeight: '600' },
     optionTextActive: { color: Colors.primary, fontWeight: '700' },
 });
+

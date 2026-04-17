@@ -16,6 +16,8 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, BedDouble, CheckCircle2, ChevronLeft } from 'lucide-react-native';
+import Layout, { moderateScale, scale } from '@/constants/layout';
+
 
 import { API_URL } from '@/constants/config';
 
@@ -404,8 +406,9 @@ const styles = StyleSheet.create({
         gap: 16,
     },
     roomCompartment: {
-        width: '46%', // Fit roughly two compartments per row
+        width: Layout.window.width > 600 ? '30%' : '46%', // Shift to 3 columns on tablet
         backgroundColor: '#F8FAFC',
+
         borderRadius: 8,
         borderWidth: 1,
         borderColor: '#E2E8F0',

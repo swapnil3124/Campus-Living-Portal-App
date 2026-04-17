@@ -10,6 +10,9 @@ import {
     ActivityIndicator,
     Platform,
 } from 'react-native';
+import { KeyboardWrapper } from '@/components/KeyboardWrapper';
+import Layout, { moderateScale, scale } from '@/constants/layout';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { Send, Image as ImageIcon, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -55,15 +58,14 @@ export default function NewComplaintScreen() {
             formData.append('description', description.trim());
 
             if (selectedImage) {
-                const uri = Platform.OS === 'android' ? selectedImage.uri : selectedImage.uri.replace('file://', '');
-                const filename = uri.split('/').pop() || 'complaint_img.jpg';
-                const match = /\.(\w+)$/.exec(filename);
-                const type = match ? `image/${match[1]}` : `image`;
+                const uri = Platform.OS === 'ios' ? selectedImage.uri.replace('file://', '') : selectedImage.uri;
+                const filename = selectedImage.fileName || uri.split('/').pop() || 'complaint_img.jpg';
+                const mimeType = selectedImage.mimeType || 'image/jpeg';
                 
                 formData.append('image', {
-                    uri,
+                    uri: selectedImage.uri, // Use the original URI for fetch on most modern RN versions
                     name: filename,
-                    type,
+                    type: mimeType,
                 } as any);
             }
 
@@ -112,7 +114,8 @@ export default function NewComplaintScreen() {
     };
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <KeyboardWrapper style={styles.container} contentContainerStyle={styles.content}>
+
             <View style={styles.section}>
                 <Text style={styles.label}>Complaint Type</Text>
                 <View style={styles.chipRow}>
@@ -192,7 +195,7 @@ export default function NewComplaintScreen() {
                     )}
                 </LinearGradient>
             </TouchableOpacity>
-        </ScrollView>
+        </KeyboardWrapper>
     );
 }
 
@@ -202,8 +205,9 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
     },
     content: {
-        padding: 20,
+        padding: scale(20),
     },
+
     section: {
         marginBottom: 24,
     },

@@ -166,7 +166,7 @@ export const generateMeritList = async (req: Request, res: Response) => {
                     students: selectedStudents,
                     settings: config.value,
                     hostelName: 'Girls', // General girls label
-                    status: 'pending' // Set to pending for manual publish
+                    status: 'draft' // Set to draft for manual publish/review
                 });
                 await newList.save();
                 results.push(newList);
@@ -274,7 +274,7 @@ export const generateMeritList = async (req: Request, res: Response) => {
                     students: selectedStudents,
                     settings: config.value,
                     hostelName: subRole || 'General',
-                    status: 'pending'
+                    status: 'draft'
                 });
                 await newList.save();
                 results.push(newList);

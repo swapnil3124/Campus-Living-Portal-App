@@ -3,13 +3,14 @@ import {
     View,
     Text,
     StyleSheet,
-    ScrollView,
     TextInput,
     TouchableOpacity,
     Alert,
     Platform,
 } from 'react-native';
+import { KeyboardWrapper } from '@/components/KeyboardWrapper';
 import { LinearGradient } from 'expo-linear-gradient';
+
 import { Send, Calendar, MapPin } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -118,7 +119,8 @@ export default function NewLeaveScreen() {
     };
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <KeyboardWrapper style={styles.container} contentContainerStyle={styles.content}>
+
             <View style={styles.section}>
                 <Text style={styles.label}>Leave Type</Text>
                 <View style={styles.chipRow}>
@@ -237,7 +239,7 @@ export default function NewLeaveScreen() {
             </TouchableOpacity>
 
             <View style={{ height: 30 }} />
-        </ScrollView>
+        </KeyboardWrapper>
     );
 }
 

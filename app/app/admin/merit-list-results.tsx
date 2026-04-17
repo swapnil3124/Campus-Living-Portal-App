@@ -49,6 +49,8 @@ import {
     ExternalLink,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import Layout, { moderateScale, scale, verticalScale } from '@/constants/layout';
+
 const Colors = {
     primary: '#00897B',
     primaryDark: '#005B4F',
@@ -425,15 +427,17 @@ export default function MeritListResultsScreen() {
     // Default sort by marks
     filteredStudents.sort((a, b) => b.prevMarks - a.prevMarks);
 
-    const draftWardenLists = React.useMemo(() => {
+    const wardenReviewLists = React.useMemo(() => {
         if (!isWarden) return [];
+        // Warden can send/resend any list that isn't published yet
         return latestLists.filter(l =>
-            l.status === 'draft' &&
+            (l.status === 'draft' || l.status === 'sent_to_rector') &&
             l.students.some((s: any) => allStudents.some(as => as.admissionId === s.admissionId))
         );
     }, [latestLists, allStudents, isWarden]);
 
-    const hasDraftWardenLists = draftWardenLists.length > 0;
+    const canWardenSend = wardenReviewLists.length > 0;
+    const allAlreadySent = canWardenSend && wardenReviewLists.every(l => l.status === 'sent_to_rector');
 
     // Check if an announcement already exists for this rector's selected hostel
     const isPublished = isRector && activeAnnouncements.some(a =>
@@ -502,7 +506,7 @@ export default function MeritListResultsScreen() {
 
     const handleBulkPublish = async () => {
         if (isWarden) {
-            if (!hasDraftWardenLists) {
+            if (!canWardenSend) {
                 Alert.alert('Info', 'All your student merit lists have already been sent.');
                 return;
             }
@@ -519,14 +523,14 @@ export default function MeritListResultsScreen() {
                             try {
                                 let successCount = 0;
                                 const { sendToRector } = useAdmissionStore.getState();
-                                for (const list of draftWardenLists) {
+                                for (const list of wardenReviewLists) {
                                 const success = await sendToRector(list._id, token!);
                                     if (success) successCount++;
                                 }
 
                                 if (successCount > 0) {
                                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                    Alert.alert('Success', `Successfully sent ${allStudents.length} students to the Rector for final review.`);
+                                    Alert.alert('Success', `Successfully ${allAlreadySent ? 'resent' : 'sent'} ${allStudents.length} students to the Rector for final review.`);
                                     await useAdmissionStore.getState().fetchMeritLists(token!);
                                 } else {
                                     Alert.alert('Error', 'Failed to send students.');
@@ -544,16 +548,24 @@ export default function MeritListResultsScreen() {
         }
 
         if (isRector) {
-            const listToPublish = latestLists.find(l => isGirlsHostel ? l.department === selectedRectorHostel : true);
+            const hNameRawForFilter = selectedRectorHostel?.toLowerCase() || '';
+            const listsToPublish = latestLists.filter(l => {
+                if (isGirlsHostel) return l.department === selectedRectorHostel;
+                // For boys, filter lists that belong to the selected hostel's year
+                if (hNameRawForFilter === 'shivneri') return l.students.some((s: any) => s.year === '1st' && s.gender?.toLowerCase() === 'male');
+                if (hNameRawForFilter === 'lenyadri') return l.students.some((s: any) => s.year === '2nd' && s.gender?.toLowerCase() === 'male');
+                if (hNameRawForFilter === 'bhimashankar') return l.students.some((s: any) => s.year === '3rd' && s.gender?.toLowerCase() === 'male');
+                return true;
+            }).filter(l => l.status !== 'published');
             
-            if (isPublished || !listToPublish || listToPublish.status === 'published') {
+            if (isPublished || listsToPublish.length === 0) {
                 Alert.alert('Info', 'This batch has already been published to the home screen.');
                 return;
             }
 
             Alert.alert(
                 'Publish to Homepage',
-                `This will officially publish the ${selectedRectorHostel} merit list to the homepage. Students will then be able to see their selection. Proceed?`,
+                `This will officially publish ${listsToPublish.length} merit list batches for the ${selectedRectorHostel} hostel to the homepage. Proceed?`,
                 [
                     { text: 'Cancel', style: 'cancel' },
                     {
@@ -562,16 +574,20 @@ export default function MeritListResultsScreen() {
                             setIsPublishing(true);
                             try {
                                 const { publishMeritList } = useAdmissionStore.getState();
-                                // Pass the actual year (e.g. '1st Year') for girls, not just 'Girls'
-                                const success = await publishMeritList(listToPublish._id, selectedRectorHostel || (isGirlsHostel ? 'Girls' : 'Generic'), token!);
+                                let successCount = 0;
+                                
+                                for (const list of listsToPublish) {
+                                    const success = await publishMeritList(list._id, selectedRectorHostel || (isGirlsHostel ? 'Girls' : 'Generic'), token!);
+                                    if (success) successCount++;
+                                }
 
-                                if (success) {
+                                if (successCount > 0) {
                                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                    Alert.alert('Success', `Published the ${selectedRectorHostel} list to the Homepage.`);
+                                    Alert.alert('Success', `Published ${successCount} lists for ${selectedRectorHostel} to the Homepage.`);
                                     await useAdmissionStore.getState().fetchMeritLists(token!);
                                     await useAnnouncementStore.getState().fetchActiveAnnouncements();
                                 } else {
-                                    Alert.alert('Error', 'Failed to publish list.');
+                                    Alert.alert('Error', 'Failed to publish lists.');
                                 }
                             } catch (e: any) {
                                 Alert.alert('Error', e.message || 'An unexpected error occurred while publishing.');
@@ -624,15 +640,35 @@ export default function MeritListResultsScreen() {
                         setIsPublishing(true);
                         try {
                             const { generatePasswords } = useAdmissionStore.getState();
-                            const targetList = latestLists.find(l => isGirlsHostel ? l.department === selectedRectorHostel : l.status === 'published');
+                            const targetHostel = (isRector && selectedRectorHostel) ? selectedRectorHostel : hostelName;
                             
-                            if (!targetList) return;
+                            const publishedLists = latestLists.filter(l => {
+                                if (l.status !== 'published') return false;
+                                if (isGirlsHostel) return l.department === selectedRectorHostel;
+                                return l.hostelName?.toLowerCase() === targetHostel?.toLowerCase();
+                            });
+                            
+                            if (publishedLists.length === 0) return;
 
-                            const response = await generatePasswords(targetList._id, validStudentIds, token!);
-                            if (response.success) {
+                            let allNewPasswords: any[] = [];
+                            for (const list of publishedLists) {
+                                // Filter valid student IDs that belong specifically to this list
+                                const studentIdsForThisList = list.students
+                                    .map((s: any) => s.admissionId.toString())
+                                    .filter((id: string) => validStudentIds.includes(id));
+
+                                if (studentIdsForThisList.length > 0) {
+                                    const response = await generatePasswords(list._id, studentIdsForThisList, token!);
+                                    if (response.success && response.passwords) {
+                                        allNewPasswords = [...allNewPasswords, ...response.passwords];
+                                    }
+                                }
+                            }
+
+                            if (allNewPasswords.length > 0) {
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                Alert.alert('Success', `Passwords generated successfully for ${response.passwords?.length || 0} students. You can now send them emails.`);
-                                if (response.passwords) setGeneratedPasswords(response.passwords);
+                                Alert.alert('Success', `Passwords generated successfully for ${allNewPasswords.length} students. You can now send them emails.`);
+                                setGeneratedPasswords(allNewPasswords);
                                 setPasswordsModalVisible(true);
                                 useAdmissionStore.getState().fetchAdmissions(token!); 
                             } else {
@@ -889,10 +925,10 @@ export default function MeritListResultsScreen() {
                                                 style={[
                                                     styles.actionIconButton,
                                                     styles.publishBtn,
-                                                    (isPublishing || (isWarden ? !hasDraftWardenLists : !latestLists.some(l => l.status !== 'published'))) && { opacity: 0.5 }
+                                                    (isPublishing || (isWarden ? !canWardenSend : !latestLists.some(l => l.status !== 'published'))) && { opacity: 0.5 }
                                                 ]}
                                                 onPress={handleBulkPublish}
-                                                disabled={isPublishing || (isWarden ? !hasDraftWardenLists : !latestLists.some(l => l.status !== 'published'))}
+                                                disabled={isPublishing || (isWarden ? !canWardenSend : !latestLists.some(l => l.status !== 'published'))}
                                             >
                                                 {isPublishing ? (
                                                     <ActivityIndicator size="small" color={Colors.white} />
@@ -900,8 +936,8 @@ export default function MeritListResultsScreen() {
                                                     <>
                                                         {isWarden ? (
                                                             <>
-                                                                {hasDraftWardenLists ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
-                                                                <Text style={[styles.actionIconText, { color: Colors.white }]}>{hasDraftWardenLists ? 'Send to Rector' : 'Sent to Rector'}</Text>
+                                                                {canWardenSend ? <Send size={18} color={Colors.white} /> : <CheckCheck size={18} color={Colors.white} />}
+                                                                <Text style={[styles.actionIconText, { color: Colors.white }]}>{canWardenSend ? (allAlreadySent ? 'Resend to Rector' : 'Send to Rector') : 'Sent to Rector'}</Text>
                                                             </>
                                                         ) : (
                                                             <>
@@ -1475,8 +1511,9 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        padding: 16,
+        padding: scale(16),
     },
+
     summaryCard: {
         backgroundColor: Colors.white,
         borderRadius: 20,
@@ -1614,9 +1651,13 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.white,
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        padding: 24,
+        padding: scale(24),
         height: '92%',
+        maxWidth: 600,
+        alignSelf: 'center',
+        width: '100%',
     },
+
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
