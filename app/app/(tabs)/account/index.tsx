@@ -11,7 +11,12 @@ import {
     ActivityIndicator,
     Modal,
     Platform,
+    BackHandler,
+    KeyboardAvoidingView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import Layout, { scale, moderateScale, verticalScale } from '@/constants/layout';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,6 +78,23 @@ function LoginScreen() {
         ]).start();
     }, [loginType]);
 
+    // Handle Hardware Back Button
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                if (loginType !== null) {
+                    setLoginType(null);
+                    return true;
+                }
+                return false;
+            };
+
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [loginType])
+    );
+
+
     const handleStudentLogin = useCallback(() => {
         if (!enrollment.trim() || !password.trim()) {
             Alert.alert('Error', 'Please fill in all fields');
@@ -97,7 +119,7 @@ function LoginScreen() {
                 return;
             }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            login('rector', { staffId: username.trim(), password: password.trim() });
+            login('rector', { hostel: rectorType, staffId: username.trim(), password: password.trim() });
         } else {
             if (!username.trim() || !password.trim()) {
                 Alert.alert('Error', 'Please fill in all fields');
@@ -130,8 +152,12 @@ function LoginScreen() {
                     </Text>
                 </Animated.View>
             </LinearGradient>
-
-            <ScrollView contentContainerStyle={styles.loginContent} showsVerticalScrollIndicator={false}>
+            <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <ScrollView contentContainerStyle={styles.loginContent} showsVerticalScrollIndicator={false}>
                 {!loginType ? (
                     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
                         <Text style={styles.selectLabel}>Choose Your Role</Text>
@@ -362,6 +388,7 @@ function LoginScreen() {
                     </Animated.View>
                 )}
             </ScrollView>
+            </KeyboardAvoidingView>
         </View >
     );
 }
@@ -663,6 +690,7 @@ const styles = StyleSheet.create({
         fontWeight: '700' as const,
         color: Colors.text,
     },
+
     backButtonContainer: {
         flexDirection: 'row',
         alignItems: 'center',

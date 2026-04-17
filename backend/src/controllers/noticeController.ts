@@ -58,17 +58,17 @@ export const getHostelNotices = async (req: Request, res: Response): Promise<any
 
         const query: any = { isActive: true };
 
-        // Support rector-level compound queries or individual hostel queries
-        if (hName === 'girls') {
+        // Support rector-level compound queries or individual hostel queries with regex for flexibility
+        if (hName === 'girls' || hName.includes('saraswati') || hName.includes('shwetambar')) {
             query.hostelName = { $regex: /saraswati|shwetambar|girls/i };
-        } else if (hName === 'boys') {
+        } else if (hName === 'boys' || hName.includes('shivneri') || hName.includes('lenyadri') || hName.includes('bhimashankar')) {
             query.hostelName = { $regex: /shivneri|lenyadri|bhimashankar|boys/i };
         } else {
-            // Individual hostel warden — case-insensitive exact match
-            query.hostelName = new RegExp(`^${hostelName as string}$`, 'i');
+            // Fallback for other potential hostels — case-insensitive match
+            query.hostelName = new RegExp(`.*${hostelName as string}.*`, 'i');
         }
 
-        if (studentOnly === 'true') {
+        if (studentOnly === 'true' || (studentOnly as any) === true) {
             query.publishToStudents = true;
         }
 

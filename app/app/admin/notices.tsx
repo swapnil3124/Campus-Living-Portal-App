@@ -12,6 +12,8 @@ import {
     Alert,
     Linking,
 } from 'react-native';
+import { KeyboardWrapper } from '@/components/KeyboardWrapper';
+
 import { useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { BlurView } from 'expo-blur';
@@ -214,7 +216,6 @@ export default function WardenNoticesScreen() {
                 body: formData,
                 headers: {
                     'Accept': 'application/json',
-                    'Content-Type': 'multipart/form-data',
                 },
             });
 
@@ -394,7 +395,10 @@ export default function WardenNoticesScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView style={styles.modalForm}>
+                        <KeyboardWrapper 
+                            style={styles.modalForm} 
+                            contentContainerStyle={{ paddingBottom: 40 }}
+                        >
                             <Text style={styles.label}>Title</Text>
                             <TextInput
                                 style={styles.input}
@@ -502,8 +506,8 @@ export default function WardenNoticesScreen() {
                                     )}
                                 </LinearGradient>
                             </TouchableOpacity>
-                            <View style={{ height: 40 }} />
-                        </ScrollView>
+                        </KeyboardWrapper>
+
                     </View>
                 </View>
             </Modal>
@@ -760,7 +764,11 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         height: '85%',
+        maxWidth: 600,
+        alignSelf: 'center',
+        width: '100%',
     },
+
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',

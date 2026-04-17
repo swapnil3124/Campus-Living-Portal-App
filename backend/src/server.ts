@@ -83,8 +83,8 @@ mongoose.connect(MONGODB_URI)
     .then(async () => {
         console.log('Connected to MongoDB');
         await initializeStaff();
-        server.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
+        server.listen(Number(PORT), '0.0.0.0', () => {
+            console.log(`Server running on port ${PORT} at http://10.219.141.132:${PORT}`);
         });
     })
     .catch(err => {

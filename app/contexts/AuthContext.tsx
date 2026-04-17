@@ -140,6 +140,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
                     const data = await response.json();
                     if (!response.ok) throw new Error(data.message || 'Login failed');
 
+                    // Validation: Ensure selected hostel/role matches assigned subRole
+                    if (['admin', 'rector', 'watchman'].includes(loginRole as any)) {
+                        const assignedHostel = data.user.subRole || '';
+                        const chosenHostel = hostel || '';
+                        
+                        if (chosenHostel && assignedHostel.toLowerCase() !== chosenHostel.toLowerCase()) {
+                            throw new Error(`Access Denied: You are assigned to ${assignedHostel}, but you selected ${chosenHostel}.`);
+                        }
+                    }
+
                     const authData: StoredAuth = {
                         isLoggedIn: true,
                         role: data.user.role,

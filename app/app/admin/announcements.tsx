@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch } from 'react-native';
+import { KeyboardWrapper } from '@/components/KeyboardWrapper';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Trash2, Plus, Calendar, Save } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -71,11 +73,12 @@ export default function AnnouncementsScreen() {
     }
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <View style={styles.header}>
+        <View style={styles.flex}>
+            <View style={[styles.header, { paddingTop: insets.top }]}>
                 <Text style={styles.headerTitle}>Announcements</Text>
             </View>
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <KeyboardWrapper style={styles.container} contentContainerStyle={styles.scrollContent}>
+
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>Add New Announcement</Text>
                     <TextInput
@@ -151,14 +154,15 @@ export default function AnnouncementsScreen() {
                         </View>
                     </View>
                 ))}
-            </ScrollView>
+            </KeyboardWrapper>
         </View>
     );
 }
-
 const styles = StyleSheet.create({
+    flex: { flex: 1 },
     container: { flex: 1, backgroundColor: '#F8F9FA' },
     header: { padding: 20, backgroundColor: Colors.primary, paddingBottom: 15 },
+
     headerTitle: { fontSize: 20, fontWeight: '700', color: Colors.white },
     scrollContent: { padding: 16 },
     card: { backgroundColor: Colors.white, padding: 16, borderRadius: 16, marginBottom: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
